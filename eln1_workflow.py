@@ -67,6 +67,15 @@ def pcent_gaus(number_of_sources):
     return number_of_sources * 100. / gaus_base
 
 
+def indx_to_bool(array_of_indices, array_length):
+    """
+    Convert an array_of_indices into a boolean array of length array_length
+    """
+    bool_array = np.zeros(array_length, dtype=bool)
+    bool_array[array_of_indices] = True
+    return bool_array
+
+
 # Read in the ML output on all overlapping area sources
 # mlfinal = Table.read(path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_10_2018_2/ML_RUN_fin_overlap.fits")
 mlfin_srl = Table.read(path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_srl.fits")
@@ -218,7 +227,7 @@ Three decisions:
 
 all_m1_source_id = mlfin_srl_ov["Source_id"][nclustered_nsingle_id]
 # Get the Gaussians that make up these sources from the Gaus catalog
-all_m1_g_indx = np.isin(mlfin_gaus_ov["Source_id"], all_m1_source_id)
+all_m1_g_indx = np.in1d(mlfin_gaus_ov["Source_id"], all_m1_source_id)
 
 print("\n ##### In M1 branch ##### \n")
 print("Total # of sources in M1 branch {0}, {1:3.2f}%".format(len(all_m1_source_id), pcent_srl(len(all_m1_source_id))))
@@ -228,6 +237,7 @@ print("Total # of sources in M1 branch {0}, {1:3.2f}%".format(len(all_m1_source_
 """
 
 # Get the source IDs from gaus catalogue with no LR threshold and those at m1
+# Because we only care about source IDs for these sources without a gauss LR, we can take unique
 m1_ngid_source_id = np.unique(mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] < lr_th) & (all_m1_g_indx)])
 
 # Find indices of these sources in the srl catalogue - returns a bool array
@@ -254,13 +264,18 @@ lgz_tot.append(np.sum(m1_ngid_hi_nsid))
 """
 
 # Get the source IDs from gaus catalogue with no LR threshold and those at m1
-m1_gid_source_id = mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] > lr_th) & (all_m1_g_indx)]
+m1_gid_source_id = mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] >= lr_th) & (all_m1_g_indx)]
+
+"""
+##### There are 801 m1_gid_source_id's? Whereas total in branch m1 is 801. Even taking unique of it brings it down to 475
+
+"""
 
 # Get indices of these source ids into the srl catalogue
 m1_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id)
 
 # Get LRs of these sources from the srl and gaus catalogue (this will have duplicate source_ids, on purpose)
-m1_gid_srl_lr_index = mlfin_srl_ov["lr_index_fin"][[kth_sid == m1_gid_source_id for kth_sid in mlfin_srl_ov["Source_id"]]]
+m1_gid_srl_lr_index = mlfin_srl_ov["lr_index_fin"][np.searchsorted(mlfin_srl_ov["Source_id"], m1_gid_source_id)]
 m1_gid_gaus_lr_index = mlfin_gaus_ov["lr_index_fin"][(mlfin_gaus_ov["lr_fin"] > lr_th) & (all_m1_g_indx)]
 
 # Simply take the difference of the two and if the absolute value is greater than 0.5, then srl and its gaus component are not matching to the same optical source!
