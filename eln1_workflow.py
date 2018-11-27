@@ -69,8 +69,8 @@ def pcent_gaus(number_of_sources):
 
 # Read in the ML output on all overlapping area sources
 # mlfinal = Table.read(path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_10_2018_2/ML_RUN_fin_overlap.fits")
-mlfin_srl = Table.read("/home/rohitk/Documents/PhD/Year1/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_srl.fits")
-mlfin_gaus = Table.read("/home/rohitk/Documents/PhD/Year1/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_gaul.fits")
+mlfin_srl = Table.read(path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_srl.fits")
+mlfin_gaus = Table.read(path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_gaul.fits")
 
 # LR threshold (currently hard-coded)
 lr_th = 0.5
@@ -96,6 +96,7 @@ cuts["bright"] = 10*1e-3    # Bright cut
 cuts["nth_nn"] = 4          # n number of NNs allowed for source to be "non-clustered"
 cuts["nth_nnsep"] = 45.     # nth_nn NNs within this separation allowed for source to be "non-clustered"
 # cuts["nnsep"] = 45.         # NN separation (arcsec)
+cuts["high_lr_th"] = 10 * lr_th
 
 # Empty list to keep track of overall numbers
 lgz_tot = []
@@ -117,8 +118,8 @@ mlfin_srl_ov["large"][large] = 1.
 lgz_tot.append(np.sum(large))
 
 # Print out the stats
-print("# of large sources {0}, {1}%".format(np.sum(large), pcent_srl(np.sum(large))))
-print("# of non-large sources {0}, {1}%".format(np.sum(~large), pcent_srl(np.sum(~large))))
+print("# of large sources {0}, {1:3.2f}%".format(np.sum(large), pcent_srl(np.sum(large))))
+print("# of non-large sources {0}, {1:3.2f}%".format(np.sum(~large), pcent_srl(np.sum(~large))))
 
 # Continue with the non-large sources...
 # Check for clustering
@@ -136,8 +137,8 @@ decision_block["nclustered"] = np.sum(~clustered)
 mlfin_srl_ov["clustered"][clustered] = 1.
 
 # Print out some stats
-print("# of clustered sources {0}, {1}%".format(np.sum(clustered), pcent_srl(np.sum(clustered))))
-print("# of non-clustered sources {0}, {1}%".format(np.sum(~clustered), pcent_srl(np.sum(~clustered))))
+print("# of clustered sources {0}, {1:3.2f}%".format(np.sum(clustered), pcent_srl(np.sum(clustered))))
+print("# of non-clustered sources {0}, {1:3.2f}%".format(np.sum(~clustered), pcent_srl(np.sum(~clustered))))
 
 # If clustered, check if there are any multiple components
 mlfin_srl_ov["clustered_multiple"] = np.nan
@@ -151,8 +152,8 @@ mlfin_srl_ov["clustered_multiple"][clustered_multiple] = 1.
 mlfin_srl_ov["clustered_nmultiple"][clustered_single] = 1.
 
 # Print out some stats
-print("# of clustered multiple sources {0}, {1}%".format(np.sum(clustered_multiple), pcent_srl(np.sum(clustered_multiple))))
-print("# of clustered single sources {0}, {1}%".format(np.sum(clustered_single), pcent_srl(np.sum(clustered_single))))
+print("# of clustered multiple sources {0}, {1:3.2f}%".format(np.sum(clustered_multiple), pcent_srl(np.sum(clustered_multiple))))
+print("# of clustered single sources {0}, {1:3.2f}%".format(np.sum(clustered_single), pcent_srl(np.sum(clustered_single))))
 
 # Add to total numbers
 lgz_tot.append(np.sum(clustered_multiple))
@@ -179,8 +180,8 @@ lrid_tot.append(np.sum(nclustered_single_id))
 lgz_tot.append(np.sum(nclustered_single_nid))
 
 # Print out some stats
-print("# of non-clustered, single sources with ID {0}, {1}%".format(np.sum(nclustered_single_id), pcent_srl(np.sum(nclustered_single_id))))
-print("# of non-clustered, single sources without ID {0}, {1}%".format(np.sum(nclustered_single_nid), pcent_srl(np.sum(nclustered_single_nid))))
+print("# of non-clustered, single sources with ID {0}, {1:3.2f}%".format(np.sum(nclustered_single_id), pcent_srl(np.sum(nclustered_single_id))))
+print("# of non-clustered, single sources without ID {0}, {1:3.2f}%".format(np.sum(nclustered_single_nid), pcent_srl(np.sum(nclustered_single_nid))))
 
 # If non-single component source, check if it has a LR id
 mlfin_srl_ov["nclustered_nsingle_id"] = np.nan
@@ -195,8 +196,8 @@ mlfin_srl_ov["nclustered_nsingle_id"][nclustered_nsingle_id] = 1.
 mlfin_srl_ov["nclustered_nsingle_nid"][nclustered_nsingle_nid] = 1.
 
 # Print out some stats
-print("# of non-clustered, non-single sources with soruce ID {0}, {1}%".format(np.sum(nclustered_nsingle_id), pcent_srl(np.sum(nclustered_nsingle_id))))
-print("# of non-clustered, non-single sources without source ID {0}, {1}%".format(np.sum(nclustered_nsingle_nid), pcent_srl(np.sum(nclustered_nsingle_nid))))
+print("# of non-clustered, non-single sources with soruce ID {0}, {1:3.2f}%".format(np.sum(nclustered_nsingle_id), pcent_srl(np.sum(nclustered_nsingle_id))))
+print("# of non-clustered, non-single sources without source ID {0}, {1:3.2f}%".format(np.sum(nclustered_nsingle_nid), pcent_srl(np.sum(nclustered_nsingle_nid))))
 
 # Add to total numbers
 lrid_tot.append(np.sum(nclustered_nsingle_id))
@@ -207,14 +208,30 @@ lgz_tot.append(np.sum(nclustered_nsingle_nid))
 # First: Check those with a source LR > threshold
 """
 
+"""
+Three decisions:
+	1. Check if there are any Gaussians with LR > threshold
+		A. If none, if source LR > 10*threshold, send to LR-ID, else LGZ
+		B. If all master_indices same as source-ID indices, accept LR-ID
+		C. If at least one gaussian's master_index is different to source-ID index, send to LGZ
+"""
+
 source_id_m1 = mlfin_srl_ov["Source_id"][nclustered_nsingle_id]
 # Get the Gaussians that make up these sources from the Gaus catalog
-g_indx_m1 = np.isin(mlfin_gaus_ov["Source_id"],source_id_m1)
+g_indx_m1 = np.isin(mlfin_gaus_ov["Source_id"], source_id_m1)
+
+"""
+# A. If none, if source LR > 10*threshold, send to LR-ID, else LGZ
+"""
+
+sid_ngaus_lr = mlfin_gaus_ov["lr_fin"][g_indx_m1] < lr_th
+# For these sources, check if the source LR instead is very high
+
 
 print("\n ################### \n")
 # At this stage, print out the "tentative" final sources
-print("Final # of sources to send to LGZ: {0}, {1}%".format(np.sum(lgz_tot), pcent_srl(np.sum(lgz_tot))))
-print("Final # of sources with good LRs: {0}, {1}%".format(np.sum(lrid_tot), pcent_srl(np.sum(lrid_tot))))
-print("Final # of sources to send to Pre-filtering: {0}, {1}%".format(np.sum(prefilt_tot), pcent_srl(np.sum(prefilt_tot))))
+print("Final # of sources to send to LGZ: {0}, {1:3.2f}%".format(np.sum(lgz_tot), pcent_srl(np.sum(lgz_tot))))
+print("Final # of sources with good LRs: {0}, {1:3.2f}%".format(np.sum(lrid_tot), pcent_srl(np.sum(lrid_tot))))
+print("Final # of sources to send to Pre-filtering: {0}, {1:3.2f}%".format(np.sum(prefilt_tot), pcent_srl(np.sum(prefilt_tot))))
 
 # Question: What LR do we get if we select the LRs of the sources "tentatively" sent to LR
