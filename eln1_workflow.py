@@ -177,7 +177,7 @@ mlfin_srl_ov["nclustered_single_nid"][nclustered_single_nid] = 1.
 
 # Add to total numbers
 lrid_tot.append(np.sum(nclustered_single_id))
-lgz_tot.append(np.sum(nclustered_single_nid))
+prefilt_tot.append(np.sum(nclustered_single_nid))
 
 # Print out some stats
 print("# of non-clustered, single sources with ID {0}, {1:3.2f}%".format(np.sum(nclustered_single_id), pcent_srl(np.sum(nclustered_single_id))))
@@ -216,17 +216,64 @@ Three decisions:
 		C. If at least one gaussian's master_index is different to source-ID index, send to LGZ
 """
 
-source_id_m1 = mlfin_srl_ov["Source_id"][nclustered_nsingle_id]
+all_m1_source_id = mlfin_srl_ov["Source_id"][nclustered_nsingle_id]
 # Get the Gaussians that make up these sources from the Gaus catalog
-g_indx_m1 = np.isin(mlfin_gaus_ov["Source_id"], source_id_m1)
+all_m1_g_indx = np.isin(mlfin_gaus_ov["Source_id"], all_m1_source_id)
+
+print("\n ##### In M1 branch ##### \n")
+print("Total # of sources in M1 branch {0}, {1:3.2f}%".format(len(all_m1_source_id), pcent_srl(len(all_m1_source_id))))
 
 """
 # A. If none, if source LR > 10*threshold, send to LR-ID, else LGZ
 """
 
-# For these sources, check if the source LR instead is very high
-# Get the source IDs from gaus catalogue with no LR threshold
-sid_ngauslr = mlfin_gaus_ov["Source_id"][mlfin_gaus_ov["lr_fin"][g_indx_m1] < lr_th]
+# Get the source IDs from gaus catalogue with no LR threshold and those at m1
+m1_ngid_source_id = np.unique(mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] < lr_th) & (all_m1_g_indx)])
+
+# Find indices of these sources in the srl catalogue - returns a bool array
+m1_ngid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m1_ngid_source_id)
+
+# Sources in m1 with no Gaus LR but with a high source lr - accept as suitable for LR
+m1_ngid_hi_sid = (mlfin_srl_ov["lr_fin"] > cuts["high_lr_th"]) & (m1_ngid_srl_ov_indx)
+# Sources in m1 with no Gaus LR or a high LR source id - send to LGZ
+m1_ngid_hi_nsid = (mlfin_srl_ov["lr_fin"] < cuts["high_lr_th"]) & (m1_ngid_srl_ov_indx)
+
+# Print out some stats
+print("# of sources with no gaus-id BUT high source LR {0}, {1:3.2f}%".format(np.sum(m1_ngid_hi_sid), pcent_srl(np.sum(m1_ngid_hi_sid))))
+print("# of sources with no gaus-id OR high source LR {0}, {1:3.2f}%".format(np.sum(m1_ngid_hi_nsid), pcent_srl(np.sum(m1_ngid_hi_nsid))))
+
+# Add to total numbers
+lrid_tot.append(np.sum(m1_ngid_hi_sid))
+lgz_tot.append(np.sum(m1_ngid_hi_nsid))
+
+"""
+# B. If all master_indices same as source-ID indices, accept LR-ID
+# 		AND
+# C. If at least one gaussian's master_index is different to source-ID index, send to LGZ
+
+"""
+
+# Get the source IDs from gaus catalogue with no LR threshold and those at m1
+m1_gid_source_id = mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] > lr_th) & (all_m1_g_indx)]
+
+# Get indices of these source ids into the srl catalogue
+m1_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id)
+
+# Get LRs of these sources from the srl and gaus catalogue (this will have duplicate source_ids, on purpose)
+m1_gid_srl_lr_index = mlfin_srl_ov["lr_index_fin"][[kth_sid == m1_gid_source_id for kth_sid in mlfin_srl_ov["Source_id"]]]
+m1_gid_gaus_lr_index = mlfin_gaus_ov["lr_index_fin"][(mlfin_gaus_ov["lr_fin"] > lr_th) & (all_m1_g_indx)]
+
+# Simply take the difference of the two and if the absolute value is greater than 0.5, then srl and its gaus component are not matching to the same optical source!
+diff_lr_index = np.abs(m1_gid_srl_lr_index - m1_gid_gaus_lr_index) > 0.5
+same_lr_index = np.abs(m1_gid_srl_lr_index - m1_gid_gaus_lr_index) < 0.5
+
+# Done need to take np.unique of the second arguments in np.isin?
+diff_lrindex_srl_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id[diff_lr_index])
+same_lrindex_srl_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id[same_lr_index])
+
+print("# Braches M1 - B and C #")
+print("# of sources with all gaus-id index same as source-id index {0}, {1:3.2f}%".format(np.sum(diff_lrindex_srl_indx), pcent_srl(np.sum(diff_lrindex_srl_indx))))
+print("# of sources with >= 1 different gaus-id index to source-id index high source LR {0}, {1:3.2f}%".format(np.sum(same_lrindex_srl_indx), pcent_srl(np.sum(same_lrindex_srl_indx))))
 
 
 print("\n ################### \n")
