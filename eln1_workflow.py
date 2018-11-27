@@ -224,8 +224,9 @@ g_indx_m1 = np.isin(mlfin_gaus_ov["Source_id"], source_id_m1)
 # A. If none, if source LR > 10*threshold, send to LR-ID, else LGZ
 """
 
-sid_ngaus_lr = mlfin_gaus_ov["lr_fin"][g_indx_m1] < lr_th
 # For these sources, check if the source LR instead is very high
+# Get the source IDs from gaus catalogue with no LR threshold
+sid_ngauslr = mlfin_gaus_ov["Source_id"][mlfin_gaus_ov["lr_fin"][g_indx_m1] < lr_th]
 
 
 print("\n ################### \n")
