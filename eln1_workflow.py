@@ -264,7 +264,7 @@ lgz_tot.append(np.sum(m1_ngid_hi_nsid))
 """
 
 # Get the source IDs from gaus catalogue with no LR threshold and those at m1
-m1_gid_source_id = mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] >= lr_th) & (all_m1_g_indx)]
+m1_gid_source_id = np.unique(mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] >= lr_th) & (all_m1_g_indx)])
 
 """
 ##### There are 801 m1_gid_source_id's? Whereas total in branch m1 is 801. Even taking unique of it brings it down to 475
@@ -272,7 +272,7 @@ m1_gid_source_id = mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] >= lr_th)
 """
 
 # Get indices of these source ids into the srl catalogue
-m1_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id)
+# m1_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id)
 
 # Get LRs of these sources from the srl and gaus catalogue (this will have duplicate source_ids, on purpose)
 m1_gid_srl_lr_index = mlfin_srl_ov["lr_index_fin"][np.searchsorted(mlfin_srl_ov["Source_id"], m1_gid_source_id)]
@@ -287,8 +287,8 @@ diff_lrindex_srl_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id[diff
 same_lrindex_srl_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id[same_lr_index])
 
 print("# Braches M1 - B and C #")
-print("# of sources with all gaus-id index same as source-id index {0}, {1:3.2f}%".format(np.sum(diff_lrindex_srl_indx), pcent_srl(np.sum(diff_lrindex_srl_indx))))
-print("# of sources with >= 1 different gaus-id index to source-id index high source LR {0}, {1:3.2f}%".format(np.sum(same_lrindex_srl_indx), pcent_srl(np.sum(same_lrindex_srl_indx))))
+print("# of sources with all gaus-id index same as source-id index {0}, {1:3.2f}%".format(np.sum(same_lrindex_srl_indx), pcent_srl(np.sum(same_lrindex_srl_indx))))
+print("# of sources with >= 1 different gaus-id index to source-id index high source LR {0}, {1:3.2f}%".format(np.sum(diff_lrindex_srl_indx), pcent_srl(np.sum(diff_lrindex_srl_indx))))
 
 
 print("\n ################### \n")
