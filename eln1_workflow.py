@@ -33,6 +33,12 @@ from astropy.table import Table
 
 """
 A simple version of the flowchart to see what source numbers we get
+
+To do:
+	1. How does the number of sources change when we consider 5NN - how many
+	of the extra sources are compact with good LRs? If most of these are compact or of high LR then we can just change to 5NN.
+	Sol: Total sent to LGZ remains ~ constant. Most of these end up having good ID so total sent to LR-ID goes from ~70% to 79%. ANd pre-filtering therefore decreases from ~20% to 11%.
+	2. Deal with the ~2400 clustered_nmultiple sources. If we use 5NN, this goes down to 866.
 """
 
 
@@ -102,7 +108,7 @@ low_th = mlfin_srl_ov["lr_fin"] < lr_th
 cuts = dict()
 cuts["large"] = 15.         # Large size cut
 cuts["bright"] = 10*1e-3    # Bright cut
-cuts["nth_nn"] = 4          # n number of NNs allowed for source to be "non-clustered"
+cuts["nth_nn"] = 5          # n number of NNs allowed for source to be "non-clustered"
 cuts["nth_nnsep"] = 45.     # nth_nn NNs within this separation allowed for source to be "non-clustered"
 # cuts["nnsep"] = 45.         # NN separation (arcsec)
 cuts["high_lr_th"] = 10 * lr_th
@@ -160,6 +166,11 @@ decision_block["clustered_nmultiple"] = np.sum(clustered_single)
 mlfin_srl_ov["clustered_multiple"][clustered_multiple] = 1.
 mlfin_srl_ov["clustered_nmultiple"][clustered_single] = 1.
 
+"""
+Deal with the clustered_single sources here:
+	1. If 
+"""
+
 # Print out some stats
 print("# of clustered multiple sources {0}, {1:3.2f}%".format(np.sum(clustered_multiple), pcent_srl(np.sum(clustered_multiple))))
 print("# of clustered single sources {0}, {1:3.2f}%".format(np.sum(clustered_single), pcent_srl(np.sum(clustered_single))))
@@ -209,10 +220,10 @@ print("# of non-clustered, non-single sources with soruce ID {0}, {1:3.2f}%".for
 print("# of non-clustered, non-single sources without source ID {0}, {1:3.2f}%".format(np.sum(nclustered_nsingle_nid), pcent_srl(np.sum(nclustered_nsingle_nid))))
 
 # Add to total numbers
-lrid_tot.append(np.sum(nclustered_nsingle_id))
 lgz_tot.append(np.sum(nclustered_nsingle_nid))
 
 """
+# M1 Branch
 # Check the LR of the gaussians making up the sources
 # First: Check those with a source LR > threshold
 """
@@ -277,22 +288,49 @@ m1_gid_bool_allcomp = [np.any(mlfin_gaus_ov["lr_fin"][aa] > lr_th) for aa in all
 # m1_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id)
 
 # Get LRs of these sources from the srl and gaus catalogue (this will have duplicate source_ids, on purpose)
-m1_gid_srl_lr_index = mlfin_srl_ov["lr_index_fin"][np.searchsorted(mlfin_srl_ov["Source_id"], m1_gid_source_id)]
-m1_gid_gaus_lr_index = mlfin_gaus_ov["lr_index_fin"][(mlfin_gaus_ov["lr_fin"] > lr_th) & (all_m1_g_indx)]
+m1_gid_srl_lr_index = np.array(mlfin_srl_ov["lr_index_fin"][np.searchsorted(mlfin_srl_ov["Source_id"], m1_gid_source_id)])
+
+all_m1_gaus_lr_index = [mlfin_gaus_ov["lr_index_fin"][aa] for aa in all_m1_grouped_g_indx]
+all_m1_gaus_lr = [mlfin_gaus_ov["lr_fin"][aa] for aa in all_m1_grouped_g_indx]
+# m1_gid_gaus_lr_bool = [np.any(aa > lr_th) for aa in all_m1_gaus_lr]
+m1_gid_gaus_lr_index = np.array(all_m1_gaus_lr_index)[m1_gid_bool]
+
 
 # Simply take the difference of the two and if the absolute value is greater than 0.5, then srl and its gaus component are not matching to the same optical source!
-diff_lr_index = np.abs(m1_gid_srl_lr_index - m1_gid_gaus_lr_index) > 0.5
-same_lr_index = np.abs(m1_gid_srl_lr_index - m1_gid_gaus_lr_index) < 0.5
+same_lr_index = np.array([np.all(cc < 0.5) for cc in np.abs(m1_gid_srl_lr_index - m1_gid_gaus_lr_index)])
+diff_lr_index = ~same_lr_index
 
 # Done need to take np.unique of the second arguments in np.isin?
 diff_lrindex_srl_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id[diff_lr_index])
 same_lrindex_srl_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id[same_lr_index])
 
+# Add to total numbers
+lrid_tot.append(np.sum(same_lr_index))
+lgz_tot.append(np.sum(diff_lr_index))
+
 print("# Braches M1 - B and C #")
 print("# of sources with all gaus-id index same as source-id index {0}, {1:3.2f}%".format(np.sum(same_lrindex_srl_indx), pcent_srl(np.sum(same_lrindex_srl_indx))))
 print("# of sources with >= 1 different gaus-id index to source-id index high source LR {0}, {1:3.2f}%".format(np.sum(diff_lrindex_srl_indx), pcent_srl(np.sum(diff_lrindex_srl_indx))))
 
+print("\n ##### End of M1 branch #####")
+print("\n ##### In M2 branch #####")
 
+"""
+# M2 Branch
+"""
+
+all_m2_source_id = mlfin_srl_ov["Source_id"][nclustered_nsingle_nid]
+# Get the Gaussians that make up these sources from the Gaus catalog
+all_m1_g_indx = np.in1d(mlfin_gaus_ov["Source_id"], all_m1_source_id)
+
+# Get a list of lists with gaussians for each source in all_m1_source_id as a separate list
+all_m1_grouped_g_indx = [mlfin_gaus_ov["Source_id"] == aa for aa in all_m1_source_id]
+
+print("\n ##### In M1 branch ##### \n")
+print("Total # of sources in M1 branch {0}, {1:3.2f}%".format(len(all_m1_source_id), pcent_srl(len(all_m1_source_id))))
+
+
+# Print out final values in each of the end-points
 print("\n ################### \n")
 # At this stage, print out the "tentative" final sources
 print("Final # of sources to send to LGZ: {0}, {1:3.2f}%".format(np.sum(lgz_tot), pcent_srl(np.sum(lgz_tot))))
@@ -302,6 +340,7 @@ print("Final # of sources to send to Pre-filtering: {0}, {1:3.2f}%".format(np.su
 
 end_point_sum = np.sum(lgz_tot) + np.sum(lrid_tot) + np.sum(prefilt_tot)
 print("Total number of sources in all end-points: {0}, {1:3.2f}%".format(end_point_sum, pcent_srl(end_point_sum)))
+
 assert end_point_sum == srl_base, "Number of sources in end points don't match up with total number of sources"
 
 # Question: What LR do we get if we select the LRs of the sources "tentatively" sent to LR
