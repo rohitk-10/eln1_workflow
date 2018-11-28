@@ -229,6 +229,9 @@ all_m1_source_id = mlfin_srl_ov["Source_id"][nclustered_nsingle_id]
 # Get the Gaussians that make up these sources from the Gaus catalog
 all_m1_g_indx = np.in1d(mlfin_gaus_ov["Source_id"], all_m1_source_id)
 
+# Get a list of lists with gaussians for each source in all_m1_source_id as a separate list
+all_m1_grouped_g_indx = [mlfin_gaus_ov["Source_id"] == aa for aa in all_m1_source_id]
+
 print("\n ##### In M1 branch ##### \n")
 print("Total # of sources in M1 branch {0}, {1:3.2f}%".format(len(all_m1_source_id), pcent_srl(len(all_m1_source_id))))
 
@@ -236,9 +239,9 @@ print("Total # of sources in M1 branch {0}, {1:3.2f}%".format(len(all_m1_source_
 # A. If none, if source LR > 10*threshold, send to LR-ID, else LGZ
 """
 
-# Get the source IDs from gaus catalogue with no LR threshold and those at m1
-# Because we only care about source IDs for these sources without a gauss LR, we can take unique
-m1_ngid_source_id = np.unique(mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] < lr_th) & (all_m1_g_indx)])
+# Get the source IDs from gaus catalogue with no LR threshold and those at m1 - FOR EACH SOURCE in all_m1_source_id
+m1_ngid_bool = [np.all(mlfin_gaus_ov["lr_fin"][aa] < lr_th) for aa in all_m1_grouped_g_indx]
+m1_ngid_source_id = all_m1_source_id[m1_ngid_bool]
 
 # Find indices of these sources in the srl catalogue - returns a bool array
 m1_ngid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m1_ngid_source_id)
@@ -263,13 +266,12 @@ lgz_tot.append(np.sum(m1_ngid_hi_nsid))
 
 """
 
-# Get the source IDs from gaus catalogue with no LR threshold and those at m1
-m1_gid_source_id = np.unique(mlfin_gaus_ov["Source_id"][(mlfin_gaus_ov["lr_fin"] >= lr_th) & (all_m1_g_indx)])
+# Get the source IDs where ANY of the gaussian components have LR > threshold and those at m1
+m1_gid_bool = [np.any(mlfin_gaus_ov["lr_fin"][aa] > lr_th) for aa in all_m1_grouped_g_indx]
+m1_gid_source_id = all_m1_source_id[m1_gid_bool]
 
-"""
-##### There are 801 m1_gid_source_id's? Whereas total in branch m1 is 801. Even taking unique of it brings it down to 475
-
-"""
+# Get bool array for all components of each source
+m1_gid_bool_allcomp = [np.any(mlfin_gaus_ov["lr_fin"][aa] > lr_th) for aa in all_m1_grouped_g_indx]
 
 # Get indices of these source ids into the srl catalogue
 # m1_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id)
@@ -296,5 +298,10 @@ print("\n ################### \n")
 print("Final # of sources to send to LGZ: {0}, {1:3.2f}%".format(np.sum(lgz_tot), pcent_srl(np.sum(lgz_tot))))
 print("Final # of sources with good LRs: {0}, {1:3.2f}%".format(np.sum(lrid_tot), pcent_srl(np.sum(lrid_tot))))
 print("Final # of sources to send to Pre-filtering: {0}, {1:3.2f}%".format(np.sum(prefilt_tot), pcent_srl(np.sum(prefilt_tot))))
+
+
+end_point_sum = np.sum(lgz_tot) + np.sum(lrid_tot) + np.sum(prefilt_tot)
+print("Total number of sources in all end-points: {0}, {1:3.2f}%".format(end_point_sum, pcent_srl(end_point_sum)))
+assert end_point_sum == srl_base, "Number of sources in end points don't match up with total number of sources"
 
 # Question: What LR do we get if we select the LRs of the sources "tentatively" sent to LR
