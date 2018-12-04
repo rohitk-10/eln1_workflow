@@ -109,9 +109,9 @@ cuts = dict()
 cuts["large"] = 15.         # Large size cut
 cuts["bright"] = 10*1e-3    # Bright cut
 cuts["nth_nn"] = 5          # n number of NNs allowed for source to be "non-clustered"
-cuts["nth_nnsep"] = 45.     # nth_nn NNs within this separation allowed for source to be "non-clustered"
-# cuts["nnsep"] = 45.         # NN separation (arcsec)
+cuts["nth_nnsep"] = 45.     # nth_nn NNs within this separation to be "non-clustered"
 cuts["high_lr_th"] = 10 * lr_th
+cuts["compact"] = 10.
 
 # Empty list to keep track of overall numbers
 lgz_tot = []
@@ -220,7 +220,7 @@ print("# of non-clustered, non-single sources with soruce ID {0}, {1:3.2f}%".for
 print("# of non-clustered, non-single sources without source ID {0}, {1:3.2f}%".format(np.sum(nclustered_nsingle_nid), pcent_srl(np.sum(nclustered_nsingle_nid))))
 
 # Add to total numbers
-lgz_tot.append(np.sum(nclustered_nsingle_nid))
+# lgz_tot.append(np.sum(nclustered_nsingle_nid))
 
 """
 # M1 Branch
@@ -284,8 +284,6 @@ m1_gid_source_id = all_m1_source_id[m1_gid_bool]
 # Get bool array for all components of each source
 m1_gid_bool_allcomp = [np.any(mlfin_gaus_ov["lr_fin"][aa] > lr_th) for aa in all_m1_grouped_g_indx]
 
-# Get indices of these source ids into the srl catalogue
-# m1_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id)
 
 # Get LRs of these sources from the srl and gaus catalogue (this will have duplicate source_ids, on purpose)
 m1_gid_srl_lr_index = np.array(mlfin_srl_ov["lr_index_fin"][np.searchsorted(mlfin_srl_ov["Source_id"], m1_gid_source_id)])
@@ -313,21 +311,84 @@ print("# of sources with all gaus-id index same as source-id index {0}, {1:3.2f}
 print("# of sources with >= 1 different gaus-id index to source-id index high source LR {0}, {1:3.2f}%".format(np.sum(diff_lrindex_srl_indx), pcent_srl(np.sum(diff_lrindex_srl_indx))))
 
 print("\n ##### End of M1 branch #####")
-print("\n ##### In M2 branch #####")
 
 """
-# M2 Branch
+# M2 Branch - Non-custered, non-single sources without a LR sel-id
 """
 
-all_m2_source_id = mlfin_srl_ov["Source_id"][nclustered_nsingle_nid]
 # Get the Gaussians that make up these sources from the Gaus catalog
-all_m1_g_indx = np.in1d(mlfin_gaus_ov["Source_id"], all_m1_source_id)
+all_m2_source_id = mlfin_srl_ov["Source_id"][nclustered_nsingle_nid]
+all_m2_g_indx = np.in1d(mlfin_gaus_ov["Source_id"], all_m2_source_id)
+# Get a list of lists with gaussians for each source in all_m1_source_id as separate lists
+all_m2_grouped_g_indx = [mlfin_gaus_ov["Source_id"] == aa for aa in all_m2_source_id]
 
-# Get a list of lists with gaussians for each source in all_m1_source_id as a separate list
-all_m1_grouped_g_indx = [mlfin_gaus_ov["Source_id"] == aa for aa in all_m1_source_id]
+print("\n ##### In M2 branch #####")
+print("Total # of sources in M2 branch {0}, {1:3.2f}%".format(len(all_m2_source_id), pcent_srl(len(all_m2_source_id))))
 
-print("\n ##### In M1 branch ##### \n")
-print("Total # of sources in M1 branch {0}, {1:3.2f}%".format(len(all_m1_source_id), pcent_srl(len(all_m1_source_id))))
+"""
+A. - If no Gaus LR then send to LGZ
+"""
+
+# Get the source IDs from gaus catalogue with no LR threshold and those at m2 - FOR EACH SOURCE in all_m2_source_id
+m2_ngid_bool = [np.all(mlfin_gaus_ov["lr_fin"][aa] < lr_th) for aa in all_m2_grouped_g_indx]
+m2_ngid_source_id = all_m2_source_id[m2_ngid_bool]
+
+# Find indices of these sources in the srl catalogue - returns a bool array
+m2_ngid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m2_ngid_source_id)
+
+# Print out some stats
+print("# of sources with no gaus-id LR {0}, {1:3.2f}%".format(np.sum(m2_ngid_srl_ov_indx), pcent_srl(np.sum(m2_ngid_srl_ov_indx))))
+
+# Add to total numbers
+lgz_tot.append(np.sum(m2_ngid_srl_ov_indx))
+
+
+"""
+B. If >= 2 Gaus LR, then also send to LGZ
+"""
+
+m2_many_gid_bool = [(np.sum(mlfin_gaus_ov["lr_fin"][aa] > lr_th) >= 2) for aa in all_m2_grouped_g_indx]
+m2_many_gid_source_id = all_m2_source_id[m2_many_gid_bool]
+m2_many_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m2_many_gid_source_id)
+
+# Print out some stats
+print("# of sources with >=2 gaus-id LR {0}, {1:3.2f}%".format(np.sum(m2_many_gid_srl_ov_indx), pcent_srl(np.sum(m2_many_gid_srl_ov_indx))))
+
+# Add to total numbers
+lgz_tot.append(np.sum(m2_many_gid_srl_ov_indx))
+
+"""
+C. and D. - Check if only one Gaus LR - Then if the Gaus has high LR and very compact, accept LR-id, else send to LGZ
+"""
+
+# Properties of all Gaussians in the m2 branch
+all_m2_gaus_lr = mlfin_gaus_ov["lr_fin"][all_m2_g_indx]
+all_m2_gaus_maj = mlfin_gaus_ov["Maj"][all_m2_g_indx] * 3600.           # Size in arcsec
+
+# Gaussians with only one LR in m2 branch
+m2_one_gid_bool = [(np.sum(mlfin_gaus_ov["lr_fin"][aa] > lr_th) == 1) for aa in all_m2_grouped_g_indx]
+
+# Of those sources, find which have a high LR threshold and are compact
+m2_one_hgid_bool = [((np.sum(mlfin_gaus_ov["lr_fin"][aa] > lr_th) == 1) &
+                     ((np.any(mlfin_gaus_ov["lr_fin"][aa] >= cuts["high_lr_th"])) &
+                     (np.any(mlfin_gaus_ov["Maj"] * 3600. < cuts["compact"]))))
+                    for aa in all_m2_grouped_g_indx]
+
+m2_one_lgid_bool = (m2_one_gid_bool) & (~np.array(m2_one_hgid_bool))
+
+# Now
+m2_one_hgid_source_id = all_m2_source_id[m2_one_hgid_bool]
+m2_one_hgid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m2_one_hgid_source_id)
+m2_one_lgid_source_id = all_m2_source_id[m2_one_lgid_bool]
+m2_one_lgid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m2_one_lgid_source_id)
+
+# Print out some stats
+print("# of compact gaussians with only one high gaus-LR {0}, {1:3.2f}%".format(np.sum(m2_one_hgid_srl_ov_indx), pcent_srl(np.sum(m2_one_hgid_srl_ov_indx))))
+print("# of non-compact or non-high gaus-lr {0}, {1:3.2f}%".format(np.sum(m2_one_lgid_srl_ov_indx), pcent_srl(np.sum(m2_one_lgid_srl_ov_indx))))
+
+# Add to total numbers
+lrid_tot.append(np.sum(m2_one_hgid_srl_ov_indx))
+lgz_tot.append(np.sum(m2_one_lgid_srl_ov_indx))
 
 
 # Print out final values in each of the end-points
