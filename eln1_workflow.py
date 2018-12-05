@@ -157,31 +157,35 @@ print("# of non-clustered sources {0}, {1:3.2f}%".format(np.sum(~clustered), pce
 
 # If clustered, check if there are any multiple components
 mlfin_srl_ov["clustered_multiple"] = np.nan
-mlfin_srl_ov["clustered_nmultiple"] = np.nan
+mlfin_srl_ov["clustered_nmultiple_hlr"] = np.nan
+mlfin_srl_ov["clustered_nmultiple_llr"] = np.nan
 
 clustered_multiple = (clustered) & (mlfin_srl_ov["S_Code"] != "S")
-clustered_single = (clustered) & (mlfin_srl_ov["S_Code"] == "S")
-decision_block["clustered_multiple"] = np.sum(clustered_multiple)
-decision_block["clustered_nmultiple"] = np.sum(clustered_single)
-mlfin_srl_ov["clustered_multiple"][clustered_multiple] = 1.
-mlfin_srl_ov["clustered_nmultiple"][clustered_single] = 1.
+clustered_nmultiple_hlr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] >= cuts["high_lr_th"])
+clustered_nmultiple_llr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] < cuts["high_lr_th"])
 
-"""
-Deal with the clustered_single sources here:
-	1. If 
-"""
+decision_block["clustered_multiple"] = np.sum(clustered_multiple)
+decision_block["clustered_nmultiple_hlr"] = np.sum(clustered_nmultiple_hlr)
+decision_block["clustered_nmultiple_llr"] = np.sum(clustered_nmultiple_llr)
+
+mlfin_srl_ov["clustered_multiple"][clustered_multiple] = 1.
+mlfin_srl_ov["clustered_nmultiple_hlr"][clustered_nmultiple_hlr] = 1.
+mlfin_srl_ov["clustered_nmultiple_llr"][clustered_nmultiple_llr] = 1.
 
 # Print out some stats
 print("# of clustered multiple sources {0}, {1:3.2f}%".format(np.sum(clustered_multiple), pcent_srl(np.sum(clustered_multiple))))
-print("# of clustered single sources {0}, {1:3.2f}%".format(np.sum(clustered_single), pcent_srl(np.sum(clustered_single))))
+print("# of clustered single sources with high LR-id {0}, {1:3.2f}%".format(np.sum(clustered_nmultiple_hlr), pcent_srl(np.sum(clustered_nmultiple_hlr))))
+print("# of clustered single sources without high LR-id {0}, {1:3.2f}%".format(np.sum(clustered_nmultiple_llr), pcent_srl(np.sum(clustered_nmultiple_llr))))
 
 # Add to total numbers
 lgz_tot.append(np.sum(clustered_multiple))
-prefilt_tot.append(np.sum(clustered_single))
+lrid_tot.append(np.sum(clustered_nmultiple_hlr))
+prefilt_tot.append(np.sum(clustered_nmultiple_llr))
 
-# 
+"""
 # Main blocks, if non-clustered, check if it is single or not
-# 
+"""
+
 mlfin_srl_ov["nclustered_single_id"] = np.nan
 mlfin_srl_ov["nclustered_single_nid"] = np.nan
 
