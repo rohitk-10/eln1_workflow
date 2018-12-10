@@ -28,7 +28,7 @@ from astropy.coordinates import search_around_sky
 plt.style.use('publish')
 
 from astropy.table import Table
-
+import os
 ##################################################
 
 """
@@ -83,9 +83,11 @@ def indx_to_bool(array_of_indices, array_length):
 
 
 # Read in the ML output on all overlapping area sources
-# mlfinal = Table.read(path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_10_2018_2/ML_RUN_fin_overlap.fits")
-mlfin_srl = Table.read(path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_srl.fits")
-mlfin_gaus = Table.read(path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_gaul.fits")
+path_srl = path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_srl.fits"
+path_gaus = path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_gaul.fits"
+
+mlfin_srl = Table.read(path_srl)
+mlfin_gaus = Table.read(path_gaus)
 
 # LR threshold (currently hard-coded)
 lr_th = 0.5
@@ -118,19 +120,28 @@ lgz_tot = []
 lrid_tot = []
 prefilt_tot = []
 
+# Range of the end-points and corresponding names
+flag_n = np.arange(1., 15)
+
+flag_names = ["large", "clus_m", "clus_nm_comp_hlr", "clus_nm_ncomp_llr", "nclus_s_lr", "nclus_s_nlr",
+              "m1_nglr_hslr", "m1_nglr_lslr", "m1_sg_lr", "m1_diffg_lr",
+              "m2_nglr", "m2_2g_lr", "m2_1glr_comp_hlr", "m2_1glr_ncomp_llr"]
+
 # Dictionary to keep track of the sources in different blocks
 decision_block = dict()
+for aa in range(len(flag_names)):
+    decision_block[flag_names[aa]] = flag_n[aa]
+
+# Flag column to keep track of sources and where they end up
+mlfin_srl_ov["flag_workflow"] = np.nan
 
 # Get all the large sources
-mlfin_srl_ov["large"] = np.nan
 large = mlfin_srl_ov["Maj"]*3600. > cuts["large"]
-
-decision_block["large"] = np.sum(large)
-decision_block["nlarge"] = np.sum(~large)
-mlfin_srl_ov["large"][large] = 1.
 
 # Add to total numbers
 lgz_tot.append(np.sum(large))
+
+mlfin_srl_ov["flag_workflow"][large] = decision_block["large"]
 
 # Print out the stats
 print("# of large sources {0}, {1:3.2f}%".format(np.sum(large), pcent_srl(np.sum(large))))
@@ -144,35 +155,20 @@ lofar_coords = SkyCoord(mlfin_srl_ov["RA"], mlfin_srl_ov["DEC"], unit='deg', fra
 indx, sep2d, _ = match_coordinates_sky(lofar_coords, lofar_coords,
                                        nthneighbor=cuts["nth_nn"])
 
-mlfin_srl_ov["clustered"] = np.nan
 clustered = (~large) & (sep2d.arcsec <= cuts["nth_nnsep"])
 # If clustered, can either be single or multiple
-decision_block["clustered"] = np.sum(clustered)
-decision_block["nclustered"] = np.sum(~clustered)
-mlfin_srl_ov["clustered"][clustered] = 1.
 
 # Print out some stats
 print("# of clustered sources {0}, {1:3.2f}%".format(np.sum(clustered), pcent_srl(np.sum(clustered))))
 print("# of non-clustered sources {0}, {1:3.2f}%".format(np.sum(~clustered), pcent_srl(np.sum(~clustered))))
 
 # If clustered, check if there are any multiple components
-mlfin_srl_ov["clustered_multiple"] = np.nan
-mlfin_srl_ov["clustered_nmultiple_hlr"] = np.nan
-mlfin_srl_ov["clustered_nmultiple_llr"] = np.nan
-
 clustered_multiple = (clustered) & (mlfin_srl_ov["S_Code"] != "S")
 clustered_nmultiple_hlr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] >= cuts["high_lr_th"]) & (mlfin_srl_ov["Maj"]*3600. <= cuts["compact"])
 clustered_nmultiple_llr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (~clustered_nmultiple_hlr)
 
 # clustered_nmultiple_llr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] < cuts["high_lr_th"])
 
-decision_block["clustered_multiple"] = np.sum(clustered_multiple)
-decision_block["clustered_nmultiple_hlr"] = np.sum(clustered_nmultiple_hlr)
-decision_block["clustered_nmultiple_llr"] = np.sum(clustered_nmultiple_llr)
-
-mlfin_srl_ov["clustered_multiple"][clustered_multiple] = 1.
-mlfin_srl_ov["clustered_nmultiple_hlr"][clustered_nmultiple_hlr] = 1.
-mlfin_srl_ov["clustered_nmultiple_llr"][clustered_nmultiple_llr] = 1.
 
 # Print out some stats
 print("# of clustered multiple sources {0}, {1:3.2f}%".format(np.sum(clustered_multiple), pcent_srl(np.sum(clustered_multiple))))
@@ -184,12 +180,13 @@ lgz_tot.append(np.sum(clustered_multiple))
 lrid_tot.append(np.sum(clustered_nmultiple_hlr))
 prefilt_tot.append(np.sum(clustered_nmultiple_llr))
 
+mlfin_srl_ov["flag_workflow"][clustered_multiple] = decision_block["clus_m"]
+mlfin_srl_ov["flag_workflow"][clustered_nmultiple_hlr] = decision_block["clus_nm_comp_hlr"]
+mlfin_srl_ov["flag_workflow"][clustered_nmultiple_llr] = decision_block["clus_nm_ncomp_llr"]
+
 """
 # Main blocks, if non-clustered, check if it is single or not
 """
-
-mlfin_srl_ov["nclustered_single_id"] = np.nan
-mlfin_srl_ov["nclustered_single_nid"] = np.nan
 
 # For non-clustered single sources, check if they have a good LR
 nclustered = (~large) & (sep2d.arcsec > cuts["nth_nnsep"])
@@ -198,28 +195,22 @@ nclustered_single_id = ((nclustered) & (mlfin_srl_ov["S_Code"] == "S") &
 nclustered_single_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] == "S") &
                          (mlfin_srl_ov["lr_fin"] < lr_th))
 
-mlfin_srl_ov["nclustered_single_id"][nclustered_single_id] = 1.
-mlfin_srl_ov["nclustered_single_nid"][nclustered_single_nid] = 1.
-
 # Add to total numbers
 lrid_tot.append(np.sum(nclustered_single_id))
 prefilt_tot.append(np.sum(nclustered_single_nid))
+
+mlfin_srl_ov["flag_workflow"][nclustered_single_id] = decision_block["nclus_s_lr"]
+mlfin_srl_ov["flag_workflow"][nclustered_single_nid] = decision_block["nclus_s_nlr"]
 
 # Print out some stats
 print("# of non-clustered, single sources with ID {0}, {1:3.2f}%".format(np.sum(nclustered_single_id), pcent_srl(np.sum(nclustered_single_id))))
 print("# of non-clustered, single sources without ID {0}, {1:3.2f}%".format(np.sum(nclustered_single_nid), pcent_srl(np.sum(nclustered_single_nid))))
 
 # If non-single component source, check if it has a LR id
-mlfin_srl_ov["nclustered_nsingle_id"] = np.nan
-mlfin_srl_ov["nclustered_nsingle_nid"] = np.nan
-
 nclustered_nsingle_id = ((nclustered) & (mlfin_srl_ov["S_Code"] != "S") &
                          (mlfin_srl_ov["lr_fin"] >= lr_th))
 nclustered_nsingle_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] != "S") &
                           (mlfin_srl_ov["lr_fin"] < lr_th))
-
-mlfin_srl_ov["nclustered_nsingle_id"][nclustered_nsingle_id] = 1.
-mlfin_srl_ov["nclustered_nsingle_nid"][nclustered_nsingle_nid] = 1.
 
 # Print out some stats
 print("# of non-clustered, non-single sources with soruce ID {0}, {1:3.2f}%".format(np.sum(nclustered_nsingle_id), pcent_srl(np.sum(nclustered_nsingle_id))))
@@ -276,6 +267,9 @@ print("# of sources with no gaus-id OR high source LR {0}, {1:3.2f}%".format(np.
 lrid_tot.append(np.sum(m1_ngid_hi_sid))
 lgz_tot.append(np.sum(m1_ngid_hi_nsid))
 
+mlfin_srl_ov["flag_workflow"][m1_ngid_hi_sid] = decision_block["m1_nglr_hslr"]
+mlfin_srl_ov["flag_workflow"][m1_ngid_hi_nsid] = decision_block["m1_nglr_lslr"]
+
 """
 # B. If all master_indices same as source-ID indices, accept LR-ID
 # 		AND
@@ -311,6 +305,9 @@ same_lrindex_srl_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id[same
 # Add to total numbers
 lrid_tot.append(np.sum(same_lr_index))
 lgz_tot.append(np.sum(diff_lr_index))
+
+mlfin_srl_ov["flag_workflow"][same_lrindex_srl_indx] = decision_block["m1_sg_lr"]
+mlfin_srl_ov["flag_workflow"][diff_lrindex_srl_indx] = decision_block["m1_diffg_lr"]
 
 print("# Braches M1 - B and C #")
 print("# of sources with all gaus-id index same as source-id index {0}, {1:3.2f}%".format(np.sum(same_lrindex_srl_indx), pcent_srl(np.sum(same_lrindex_srl_indx))))
@@ -348,6 +345,7 @@ print("# of sources with no gaus-id LR {0}, {1:3.2f}%".format(np.sum(m2_ngid_srl
 # Add to total numbers
 lgz_tot.append(np.sum(m2_ngid_srl_ov_indx))
 
+mlfin_srl_ov["flag_workflow"][m2_ngid_srl_ov_indx] = decision_block["m2_nglr"]
 
 """
 B. If >= 2 Gaus LR, then also send to LGZ
@@ -362,6 +360,8 @@ print("# of sources with >=2 gaus-id LR {0}, {1:3.2f}%".format(np.sum(m2_many_gi
 
 # Add to total numbers
 lgz_tot.append(np.sum(m2_many_gid_srl_ov_indx))
+
+mlfin_srl_ov["flag_workflow"][m2_many_gid_srl_ov_indx] = decision_block["m2_2g_lr"]
 
 """
 C. and D. - Check if only one Gaus LR - Then if the Gaus has high LR and very compact, accept LR-id, else send to LGZ
@@ -396,6 +396,8 @@ print("# of non-compact or non-high gaus-lr {0}, {1:3.2f}%".format(np.sum(m2_one
 lrid_tot.append(np.sum(m2_one_hgid_srl_ov_indx))
 lgz_tot.append(np.sum(m2_one_lgid_srl_ov_indx))
 
+mlfin_srl_ov["flag_workflow"][m2_one_hgid_srl_ov_indx] = decision_block["m2_1glr_comp_hlr"]
+mlfin_srl_ov["flag_workflow"][m2_one_lgid_srl_ov_indx] = decision_block["m2_1glr_ncomp_llr"]
 
 # Print out final values in each of the end-points
 print("\n ################### \n")
@@ -410,4 +412,27 @@ print("Total number of sources in all end-points: {0}, {1:3.2f}%".format(end_poi
 
 assert end_point_sum == srl_base, "Number of sources in end points don't match up with total number of sources"
 
+# Copy the flag_workflow comlum to the full source catalogue
+mlfin_srl["flag_workflow"] = np.nan
+mlfin_srl["flag_workflow"][indx_ov_srl] = mlfin_srl_ov["flag_workflow"]
+
+# Write this to file - to be used as input to the LR code
+outdir_name = "workflow_iter_1"
+last_num = outdir_name[-1]
+if os.path.exists(outdir_name):
+
+    # Get list of directories
+    dirs_today = sorted(glob.glob(outdir_name+"*"))
+
+    # Now create a new output directory name by adding one to the last number
+    last_num = int(dirs_today[-1].split("_")[-1])+1
+
+    # Now finally create the directory
+    outdir_name = outdir_name+"_"+str(last_num)
+    os.makedirs(outdir_name)
+else:
+    os.makedirs(outdir_name)
+
+outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow_" + last_num + ".fits"
+mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits')
 # Question: What LR do we get if we select the LRs of the sources "tentatively" sent to LR
