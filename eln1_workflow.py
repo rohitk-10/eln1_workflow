@@ -108,7 +108,7 @@ low_th = mlfin_srl_ov["lr_fin"] < lr_th
 cuts = dict()
 cuts["large"] = 15.         # Large size cut
 cuts["bright"] = 10*1e-3    # Bright cut
-cuts["nth_nn"] = 5          # n number of NNs allowed for source to be "non-clustered"
+cuts["nth_nn"] = 4          # n number of NNs allowed for source to be "non-clustered"
 cuts["nth_nnsep"] = 45.     # nth_nn NNs within this separation to be "non-clustered"
 cuts["high_lr_th"] = 10 * lr_th
 cuts["compact"] = 10.
@@ -161,8 +161,10 @@ mlfin_srl_ov["clustered_nmultiple_hlr"] = np.nan
 mlfin_srl_ov["clustered_nmultiple_llr"] = np.nan
 
 clustered_multiple = (clustered) & (mlfin_srl_ov["S_Code"] != "S")
-clustered_nmultiple_hlr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] >= cuts["high_lr_th"])
-clustered_nmultiple_llr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] < cuts["high_lr_th"])
+clustered_nmultiple_hlr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] >= cuts["high_lr_th"]) & (mlfin_srl_ov["Maj"]*3600. <= cuts["compact"])
+clustered_nmultiple_llr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (~clustered_nmultiple_hlr)
+
+# clustered_nmultiple_llr = (clustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] < cuts["high_lr_th"])
 
 decision_block["clustered_multiple"] = np.sum(clustered_multiple)
 decision_block["clustered_nmultiple_hlr"] = np.sum(clustered_nmultiple_hlr)
