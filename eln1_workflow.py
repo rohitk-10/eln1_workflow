@@ -42,6 +42,26 @@ To do:
 """
 
 
+def write_worflow_out():
+    outdir_name = "workflow_iter_1"
+    last_num = outdir_name[-1]
+
+    if os.path.exists(outdir_name):
+        # Get list of directories
+        dirs_today = sorted(glob.glob(outdir_name+"*"))
+        last_num = int(dirs_today[-1].split("_")[-1])+1
+
+        # Now finally create the directory
+        outdir_name = outdir_name+"_"+str(last_num)
+        os.makedirs(outdir_name)
+    else:
+        os.makedirs(outdir_name)
+
+    outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow_" + last_num + ".fits"
+    mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits')
+    return
+
+
 def get_overlap_sources(lofar_cat):
     """
     Return Source_id columns of LOFAR sources within overlapping area of multiwavelength coverage
@@ -417,22 +437,6 @@ mlfin_srl["flag_workflow"] = np.nan
 mlfin_srl["flag_workflow"][indx_ov_srl] = mlfin_srl_ov["flag_workflow"]
 
 # Write this to file - to be used as input to the LR code
-outdir_name = "workflow_iter_1"
-last_num = outdir_name[-1]
-if os.path.exists(outdir_name):
-
-    # Get list of directories
-    dirs_today = sorted(glob.glob(outdir_name+"*"))
-
-    # Now create a new output directory name by adding one to the last number
-    last_num = int(dirs_today[-1].split("_")[-1])+1
-
-    # Now finally create the directory
-    outdir_name = outdir_name+"_"+str(last_num)
-    os.makedirs(outdir_name)
-else:
-    os.makedirs(outdir_name)
-
-outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow_" + last_num + ".fits"
-mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits')
-# Question: What LR do we get if we select the LRs of the sources "tentatively" sent to LR
+write_out = False
+if write_out is True:
+    write_worflow_out()
