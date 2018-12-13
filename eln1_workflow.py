@@ -372,6 +372,10 @@ B. If >= 2 Gaus LR, then also send to LGZ
 """
 
 m2_many_gid_bool = [(np.sum(mlfin_gaus_ov["lr_fin"][aa] > lr_th) >= 2) for aa in all_m2_grouped_g_indx]
+m2_many_gid_bool_same = [((np.sum(mlfin_gaus_ov["lr_fin"][aa] > lr_th) >= 2) &
+                         (np.std(mlfin_gaus_ov["lr_index_fin"][aa]) == 0.))
+                         for aa in all_m2_grouped_g_indx]
+
 m2_many_gid_source_id = all_m2_source_id[m2_many_gid_bool]
 m2_many_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m2_many_gid_source_id)
 
