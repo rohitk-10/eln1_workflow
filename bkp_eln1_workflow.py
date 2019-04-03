@@ -11,9 +11,6 @@ elif gethostname() == 'rohitk-elitebook':
 import sys
 sys.path.append(path_start+'basic_functions')
 from useful_functions import return_hist_par, varstat, latest_dir, logspace_bins
-from plot_func import rc_def, make_fig
-rc_def()
-
 # import overlapping_area as ova
 from overlapping_area import (isinpan, isinukidss, isinSWIRE, isinSERVS)
 ##################################################
@@ -28,10 +25,10 @@ from astropy import units as u
 from astropy.coordinates import match_coordinates_sky
 from astropy.coordinates import search_around_sky
 
+plt.style.use('publish')
 
 from astropy.table import Table
 import os
-import pickle
 ##################################################
 
 """
@@ -43,29 +40,6 @@ To do:
 	Sol: Total sent to LGZ remains ~ constant. Most of these end up having good ID so total sent to LR-ID goes from ~70% to 79%. ANd pre-filtering therefore decreases from ~20% to 11%.
 	2. Deal with the ~2400 clustered_nmultiple sources. If we use 5NN, this goes down to 866.
 """
-
-
-def write_worflow_out(sources_to_lr, sources_to_lgz):
-    outdir_name = "workflow_iter_1"
-    last_num = outdir_name[-1]
-
-    if os.path.exists(outdir_name):
-        # Get list of directories
-        dirs_today = sorted(glob.glob(outdir_name+"*"))
-        last_num = int(dirs_today[-1].split("_")[-1])+1
-
-        # Now finally create the directory
-        outdir_name = outdir_name+"_"+str(last_num)
-        os.makedirs(outdir_name)
-    else:
-        os.makedirs(outdir_name)
-
-    outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow_" + last_num + ".fits"
-    mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits')
-
-    pickle.dump(sources_to_lr, open(outdir_name + "/sources_to_send_to_lr.pckl", "wb"))
-    pickle.dump(sources_to_lr, open(outdir_name + "/sources_to_send_to_lgz.pckl", "wb"))
-    return
 
 
 def get_overlap_sources(lofar_cat):
@@ -109,19 +83,14 @@ def indx_to_bool(array_of_indices, array_length):
 
 
 # Read in the ML output on all overlapping area sources
-# path_srl = path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_srl.fits"
-# path_gaus = path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_gaul.fits"
-
-path_srl = "/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs/27_03_2019_1/EN1_ML_RUN_fin_overlap__srl.fits"
-path_gaus = "/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs/01_04_2019_1/EN1_ML_RUN_fin_overlap__gaul.fits"
-
+path_srl = path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_srl.fits"
+path_gaus = path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_gaul.fits"
 
 mlfin_srl = Table.read(path_srl)
 mlfin_gaus = Table.read(path_gaus)
 
 # LR threshold (currently hard-coded)
 lr_th = 0.5
-lr_th = 0.49766385505426947
 
 # Get indices of overlapping sources in srl and gaus catalogues
 indx_ov_srl, bool_ov_srl = get_overlap_sources(mlfin_srl)
@@ -152,7 +121,7 @@ lrid_tot = []
 prefilt_tot = []
 
 # Range of the end-points and corresponding names
-flag_n = np.arange(0., 14)
+flag_n = np.arange(1., 15)
 
 flag_names = ["large", "clus_m", "clus_nm_comp_hlr", "clus_nm_ncomp_llr", "nclus_s_lr", "nclus_s_nlr",
               "m1_nglr_hslr", "m1_nglr_lslr", "m1_sg_lr", "m1_diffg_lr",
@@ -244,8 +213,8 @@ nclustered_nsingle_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] != "S") &
                           (mlfin_srl_ov["lr_fin"] < lr_th))
 
 # Print out some stats
-print("# of non-clustered, non-single sources with soruce ID {0}, {1:3.2f}% --> M1 branch".format(np.sum(nclustered_nsingle_id), pcent_srl(np.sum(nclustered_nsingle_id))))
-print("# of non-clustered, non-single sources without source ID {0}, {1:3.2f}% --> M2 branch".format(np.sum(nclustered_nsingle_nid), pcent_srl(np.sum(nclustered_nsingle_nid))))
+print("# of non-clustered, non-single sources with soruce ID {0}, {1:3.2f}%".format(np.sum(nclustered_nsingle_id), pcent_srl(np.sum(nclustered_nsingle_id))))
+print("# of non-clustered, non-single sources without source ID {0}, {1:3.2f}%".format(np.sum(nclustered_nsingle_nid), pcent_srl(np.sum(nclustered_nsingle_nid))))
 
 # Add to total numbers
 # lgz_tot.append(np.sum(nclustered_nsingle_nid))
@@ -383,10 +352,6 @@ B. If >= 2 Gaus LR, then also send to LGZ
 """
 
 m2_many_gid_bool = [(np.sum(mlfin_gaus_ov["lr_fin"][aa] > lr_th) >= 2) for aa in all_m2_grouped_g_indx]
-m2_many_gid_bool_same = [((np.sum(mlfin_gaus_ov["lr_fin"][aa] > lr_th) >= 2) &
-                         (np.std(mlfin_gaus_ov["lr_index_fin"][aa]) == 0.))
-                         for aa in all_m2_grouped_g_indx]
-
 m2_many_gid_source_id = all_m2_source_id[m2_many_gid_bool]
 m2_many_gid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m2_many_gid_source_id)
 
@@ -445,56 +410,29 @@ print("Final # of sources to send to Pre-filtering: {0}, {1:3.2f}%".format(np.su
 end_point_sum = np.sum(lgz_tot) + np.sum(lrid_tot) + np.sum(prefilt_tot)
 print("Total number of sources in all end-points: {0}, {1:3.2f}%".format(end_point_sum, pcent_srl(end_point_sum)))
 
-# assert end_point_sum == srl_base, "Number of sources in end points don't match up with total number of sources"
+assert end_point_sum == srl_base, "Number of sources in end points don't match up with total number of sources"
 
 # Copy the flag_workflow comlum to the full source catalogue
 mlfin_srl["flag_workflow"] = np.nan
 mlfin_srl["flag_workflow"][indx_ov_srl] = mlfin_srl_ov["flag_workflow"]
 
-
-# Get the indices of sources to be sent to LR
-lr_keys = ["clus_nm_comp_hlr", "nclus_s_lr", "m1_nglr_hslr", "m1_sg_lr", "m2_1glr_comp_hlr"]
-prefilt_keys = ["clus_nm_ncomp_llr", "nclus_s_nlr"]
-
-totlr_keys = lr_keys
-totlr_keys.extend(prefilt_keys)
-
-lr_decision_vals = []
-for key in lr_keys:
-    lr_decision_vals.append(decision_block[key])
-
-
-send_to_lr_bool = np.zeros(len(mlfin_srl_ov), dtype=bool)
-for k in lr_decision_vals:
-    print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
-
-    send_to_lr_bool = (send_to_lr_bool) | (mlfin_srl_ov["flag_workflow"] == k)
-
-
-# Now do the same for sources sent to LGZ
-lgz_keys = [aa for aa in flag_names if aa not in totlr_keys]
-lgz_decision_vals = []
-for key in lgz_keys:
-    lgz_decision_vals.append(decision_block[key])
-
-send_to_lgz_bool = np.zeros(len(mlfin_srl_ov), dtype=bool)
-for k in lgz_decision_vals:
-    print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
-
-    send_to_lgz_bool = (send_to_lgz_bool) | (mlfin_srl_ov["flag_workflow"] == k)
-
-
-total_epoint = send_to_lr_bool | send_to_lgz_bool
-# snotin = ~total_epoint & bool_ov_srl
-snotin = ~total_epoint
-
-
-"""
-Solution: np.sum(~clustered & single & ~large & np.isnan(mlfin_srl_ov["lr_fin"]))
-np.sum(~clustered & single & ~large) != 12021+946
-"""
-
 # Write this to file - to be used as input to the LR code
-write_out = False
-if write_out is True:
-    write_worflow_out(send_to_lr_bool, send_to_lgz_bool)
+outdir_name = "workflow_iter_1"
+last_num = outdir_name[-1]
+if os.path.exists(outdir_name):
+
+    # Get list of directories
+    dirs_today = sorted(glob.glob(outdir_name+"*"))
+
+    # Now create a new output directory name by adding one to the last number
+    last_num = int(dirs_today[-1].split("_")[-1])+1
+
+    # Now finally create the directory
+    outdir_name = outdir_name+"_"+str(last_num)
+    os.makedirs(outdir_name)
+else:
+    os.makedirs(outdir_name)
+
+outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow_" + last_num + ".fits"
+mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits')
+# Question: What LR do we get if we select the LRs of the sources "tentatively" sent to LR
