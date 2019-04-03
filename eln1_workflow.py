@@ -14,7 +14,7 @@ from useful_functions import return_hist_par, varstat, latest_dir, logspace_bins
 from plot_func import rc_def, make_fig
 rc_def()
 
-# import overlapping_area as ova
+from moc_util import coords_to_hpidx, inMoc
 from overlapping_area import (isinpan, isinukidss, isinSWIRE, isinSERVS)
 ##################################################
 
@@ -32,6 +32,11 @@ from astropy.coordinates import search_around_sky
 from astropy.table import Table
 import os
 import pickle
+
+# For MOC files
+import pymoc.io.fits
+import healpy as hp
+import pymoc.util.catalog
 ##################################################
 
 """
@@ -55,16 +60,19 @@ def write_worflow_out(sources_to_lr, sources_to_lgz):
         last_num = int(dirs_today[-1].split("_")[-1])+1
 
         # Now finally create the directory
-        outdir_name = outdir_name+"_"+str(last_num)
+        outdir_name = "workflow_iter_"+str(last_num)
         os.makedirs(outdir_name)
     else:
         os.makedirs(outdir_name)
 
-    outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow_" + last_num + ".fits"
+    outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow.fits"
     mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits')
 
     pickle.dump(sources_to_lr, open(outdir_name + "/sources_to_send_to_lr.pckl", "wb"))
     pickle.dump(sources_to_lr, open(outdir_name + "/sources_to_send_to_lgz.pckl", "wb"))
+
+    # Write the decision block
+    pickle.dump(decision_block, open(outdir_name + "/bootes_decision_block_dict.pckl", "wb"))
     return
 
 
@@ -108,10 +116,9 @@ def indx_to_bool(array_of_indices, array_length):
     return bool_array
 
 
-# Read in the ML output on all overlapping area sources
-# path_srl = path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_srl.fits"
-# path_gaus = path_start + "OCT17_ELAIS_im/maxl_test/full_runs/26_11_2018_1/ML_RUN_fin_overlap_gaul.fits"
+field = "EN1"
 
+# Read in the ML output on all overlapping area sources
 path_srl = "/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs/27_03_2019_1/EN1_ML_RUN_fin_overlap__srl.fits"
 path_gaus = "/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs/01_04_2019_1/EN1_ML_RUN_fin_overlap__gaul.fits"
 
@@ -120,12 +127,13 @@ mlfin_srl = Table.read(path_srl)
 mlfin_gaus = Table.read(path_gaus)
 
 # LR threshold (currently hard-coded)
-lr_th = 0.5
-lr_th = 0.49766385505426947
+lr_th = 0.16
 
-# Get indices of overlapping sources in srl and gaus catalogues
+
 indx_ov_srl, bool_ov_srl = get_overlap_sources(mlfin_srl)
 indx_ov_gaus, bool_ov_gaus = get_overlap_sources(mlfin_gaus)
+
+print("Total # of sources in srl and gaus catalogues within overlapping area: {0}, {1}".format(len(indx_ov_srl), len(indx_ov_gaus)))
 
 # Set this as the baseline of "All" sources
 srl_base = len(indx_ov_srl)
@@ -135,7 +143,6 @@ gaus_base = len(indx_ov_gaus)
 mlfin_srl_ov = mlfin_srl[(indx_ov_srl)]
 mlfin_gaus_ov = mlfin_gaus[(indx_ov_gaus)]
 
-low_th = mlfin_srl_ov["lr_fin"] < lr_th
 
 # Definition of the cuts to make
 cuts = dict()
@@ -221,10 +228,14 @@ mlfin_srl_ov["flag_workflow"][clustered_nmultiple_llr] = decision_block["clus_nm
 
 # For non-clustered single sources, check if they have a good LR
 nclustered = (~large) & (sep2d.arcsec > cuts["nth_nnsep"])
-nclustered_single_id = ((nclustered) & (mlfin_srl_ov["S_Code"] == "S") &
-                        (mlfin_srl_ov["lr_fin"] >= lr_th))
-nclustered_single_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] == "S") &
-                         (mlfin_srl_ov["lr_fin"] < lr_th))
+nclustered_single_id = ((nclustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] >= lr_th))
+
+# Line edited to add nan LR values
+# nclustered_single_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] < lr_th))
+nclustered_single_nid = (nclustered) & (mlfin_srl_ov["S_Code"] == "S") & ((mlfin_srl_ov["lr_fin"] < lr_th) | np.isnan(mlfin_srl_ov["lr_fin"]))
+# Or equally:
+# nclustered_single_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] == "S") & ~nclustered_single_id)
+
 
 # Add to total numbers
 lrid_tot.append(np.sum(nclustered_single_id))
@@ -238,10 +249,13 @@ print("# of non-clustered, single sources with ID {0}, {1:3.2f}%".format(np.sum(
 print("# of non-clustered, single sources without ID {0}, {1:3.2f}%".format(np.sum(nclustered_single_nid), pcent_srl(np.sum(nclustered_single_nid))))
 
 # If non-single component source, check if it has a LR id
-nclustered_nsingle_id = ((nclustered) & (mlfin_srl_ov["S_Code"] != "S") &
-                         (mlfin_srl_ov["lr_fin"] >= lr_th))
-nclustered_nsingle_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] != "S") &
-                          (mlfin_srl_ov["lr_fin"] < lr_th))
+nclustered_nsingle_id = ((nclustered) & (mlfin_srl_ov["S_Code"] != "S") & (mlfin_srl_ov["lr_fin"] >= lr_th))
+
+# Line edited to add nan LR values
+# nclustered_nsingle_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] != "S") & (mlfin_srl_ov["lr_fin"] < lr_th))
+nclustered_nsingle_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] != "S") & ((mlfin_srl_ov["lr_fin"] < lr_th) | np.isnan(mlfin_srl_ov["lr_fin"])))
+# Or equally:
+# nclustered_nsingle_nid = ((nclustered) & (mlfin_srl_ov["S_Code"] != "S") & ~nclustered_nsingle_id)
 
 # Print out some stats
 print("# of non-clustered, non-single sources with soruce ID {0}, {1:3.2f}% --> M1 branch".format(np.sum(nclustered_nsingle_id), pcent_srl(np.sum(nclustered_nsingle_id))))
@@ -360,11 +374,11 @@ print("\n ##### In M2 branch #####")
 print("Total # of sources in M2 branch {0}, {1:3.2f}%".format(len(all_m2_source_id), pcent_srl(len(all_m2_source_id))))
 
 """
-A. - If no Gaus LR then send to LGZ
+A. - If no Gaus LR then send to Pre-filtering
 """
 
 # Get the source IDs from gaus catalogue with no LR threshold and those at m2 - FOR EACH SOURCE in all_m2_source_id
-m2_ngid_bool = [np.all(mlfin_gaus_ov["lr_fin"][aa] < lr_th) for aa in all_m2_grouped_g_indx]
+m2_ngid_bool = [np.all(((mlfin_gaus_ov["lr_fin"][aa] < lr_th) | np.isnan(mlfin_gaus_ov["lr_fin"][aa]))) for aa in all_m2_grouped_g_indx]
 m2_ngid_source_id = all_m2_source_id[m2_ngid_bool]
 
 # Find indices of these sources in the srl catalogue - returns a bool array
@@ -374,7 +388,7 @@ m2_ngid_srl_ov_indx = np.isin(mlfin_srl_ov["Source_id"], m2_ngid_source_id)
 print("# of sources with no gaus-id LR {0}, {1:3.2f}%".format(np.sum(m2_ngid_srl_ov_indx), pcent_srl(np.sum(m2_ngid_srl_ov_indx))))
 
 # Add to total numbers
-lgz_tot.append(np.sum(m2_ngid_srl_ov_indx))
+prefilt_tot.append(np.sum(m2_ngid_srl_ov_indx))
 
 mlfin_srl_ov["flag_workflow"][m2_ngid_srl_ov_indx] = decision_block["m2_nglr"]
 
@@ -445,19 +459,49 @@ print("Final # of sources to send to Pre-filtering: {0}, {1:3.2f}%".format(np.su
 end_point_sum = np.sum(lgz_tot) + np.sum(lrid_tot) + np.sum(prefilt_tot)
 print("Total number of sources in all end-points: {0}, {1:3.2f}%".format(end_point_sum, pcent_srl(end_point_sum)))
 
-# assert end_point_sum == srl_base, "Number of sources in end points don't match up with total number of sources"
+assert end_point_sum == srl_base, "Number of sources in end points don't match up with total number of sources"
 
 # Copy the flag_workflow comlum to the full source catalogue
 mlfin_srl["flag_workflow"] = np.nan
 mlfin_srl["flag_workflow"][indx_ov_srl] = mlfin_srl_ov["flag_workflow"]
 
+#############################################################################
 
-# Get the indices of sources to be sent to LR
-lr_keys = ["clus_nm_comp_hlr", "nclus_s_lr", "m1_nglr_hslr", "m1_sg_lr", "m2_1glr_comp_hlr"]
-prefilt_keys = ["clus_nm_ncomp_llr", "nclus_s_nlr"]
+"""
+# Now get the indices of the sources that are sent to different workflows (i.e. LR, pre-filtering, or LGZ)
+"""
 
-totlr_keys = lr_keys
-totlr_keys.extend(prefilt_keys)
+# Are you running this workflow to iterate through and select sources most suitable to LR calibration?
+# If so, set True and the indices will be different to when the workflow is run for the final version
+lr_calibrating = input("Are you running this workflow to iterate through and select sources most suitable to LR calibration? (Y/N) ")
+
+if lr_calibrating.lower()[0] == "y":
+
+    print("Running this workflow to iterate through and select sources most suitable to LR calibration")
+
+    print("Key differences: ")
+    print("Not using 'Accept Gaussian LR ID' or the prefiltering end-point: 'clustred, single without LR>10*th and Maj<10'''")
+
+    # Get the indices of sources to be sent to LR
+    lr_keys = ["clus_nm_comp_hlr", "nclus_s_lr", "m1_nglr_hslr", "m1_sg_lr"]
+    prefilt_keys = ["clus_nm_ncomp_llr", "nclus_s_nlr"]
+
+    totlr_keys = lr_keys
+    totlr_keys.extend(prefilt_keys)
+
+    lgz_keys = [aa for aa in flag_names if aa not in totlr_keys]
+elif lr_calibrating.lower()[0] == "n":
+    # Get the indices of sources to be sent to LR
+    lr_keys = ["clus_nm_comp_hlr", "nclus_s_lr", "m1_nglr_hslr", "m1_sg_lr", "m2_1glr_comp_hlr"]
+    prefilt_keys = ["clus_nm_ncomp_llr", "nclus_s_nlr", "m2_nglr"]
+
+    totlr_keys = lr_keys
+    totlr_keys.extend(prefilt_keys)
+
+    lgz_keys = [aa for aa in flag_names if aa not in totlr_keys]
+else:
+    raise Exception("Enter a valid reason for running this workflow script!")
+
 
 lr_decision_vals = []
 for key in lr_keys:
@@ -466,35 +510,45 @@ for key in lr_keys:
 
 send_to_lr_bool = np.zeros(len(mlfin_srl_ov), dtype=bool)
 for k in lr_decision_vals:
-    print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
-
+    # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
     send_to_lr_bool = (send_to_lr_bool) | (mlfin_srl_ov["flag_workflow"] == k)
 
 
 # Now do the same for sources sent to LGZ
-lgz_keys = [aa for aa in flag_names if aa not in totlr_keys]
 lgz_decision_vals = []
 for key in lgz_keys:
     lgz_decision_vals.append(decision_block[key])
 
 send_to_lgz_bool = np.zeros(len(mlfin_srl_ov), dtype=bool)
 for k in lgz_decision_vals:
-    print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
-
+    # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
     send_to_lgz_bool = (send_to_lgz_bool) | (mlfin_srl_ov["flag_workflow"] == k)
 
 
 total_epoint = send_to_lr_bool | send_to_lgz_bool
-# snotin = ~total_epoint & bool_ov_srl
 snotin = ~total_epoint
+
+# Write this to file - to be used as input to the LR code
+write_out = False
+if write_out is True:
+
+    print("Writing the output of the workflow")
+    write_worflow_out(send_to_lr_bool, send_to_lgz_bool)
+
+
+"""
+# Get the indices of sources to be sent to LR
+lr_keys = ["clus_nm_comp_hlr", "nclus_s_lr", "m1_nglr_hslr", "m1_sg_lr", "m2_1glr_comp_hlr"]
+prefilt_keys = ["clus_nm_ncomp_llr", "nclus_s_nlr"]
+
+totlr_keys = lr_keys
+totlr_keys.extend(prefilt_keys)
+
+lgz_keys = [aa for aa in flag_names if aa not in totlr_keys]
+"""
 
 
 """
 Solution: np.sum(~clustered & single & ~large & np.isnan(mlfin_srl_ov["lr_fin"]))
 np.sum(~clustered & single & ~large) != 12021+946
 """
-
-# Write this to file - to be used as input to the LR code
-write_out = False
-if write_out is True:
-    write_worflow_out(send_to_lr_bool, send_to_lgz_bool)
