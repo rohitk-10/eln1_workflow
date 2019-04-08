@@ -117,26 +117,10 @@ def indx_to_bool(array_of_indices, array_length):
 
 
 field = "EN1"
-# Write output i.e. which files are at each endpoint to file?
-write_out = True
-
-# Are you using the output after a workflow iteration?
-workflow_iter = False
-
-if workflow_iter:
-    add_str = "_workflow"
-else:
-    add_str = ""
-
-
-# Are you running this workflow to iterate through and select sources most suitable to LR calibration?
-# If so, set True and the indices will be different to when the workflow is run for the final version
-lr_calibrating = input("Are you running this workflow to iterate through and select sources most suitable to LR calibration? (Y/N) ")
-
 
 # Read in the ML output on all overlapping area sources
-path_srl = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs_srl"+add_str+"/*2019*") + "/" + field + "_ML_RUN_fin_overlap_srl.fits"
-path_gaus = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs_gaul"+add_str+"/*2019*") + "/" + field + "_ML_RUN_fin_overlap_gaul.fits"
+path_srl = "/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs/27_03_2019_1/EN1_ML_RUN_fin_overlap__srl.fits"
+path_gaus = "/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs/01_04_2019_1/EN1_ML_RUN_fin_overlap__gaul.fits"
 
 
 mlfin_srl = Table.read(path_srl)
@@ -487,7 +471,10 @@ mlfin_srl["flag_workflow"][indx_ov_srl] = mlfin_srl_ov["flag_workflow"]
 # Now get the indices of the sources that are sent to different workflows (i.e. LR, pre-filtering, or LGZ)
 """
 
-# If loop to decide which endpoints to use based on how you are running it
+# Are you running this workflow to iterate through and select sources most suitable to LR calibration?
+# If so, set True and the indices will be different to when the workflow is run for the final version
+lr_calibrating = input("Are you running this workflow to iterate through and select sources most suitable to LR calibration? (Y/N) ")
+
 if lr_calibrating.lower()[0] == "y":
 
     print("Running this workflow to iterate through and select sources most suitable to LR calibration")
@@ -521,10 +508,10 @@ for key in lr_keys:
     lr_decision_vals.append(decision_block[key])
 
 
-send_to_lr_bool = np.zeros(len(mlfin_srl), dtype=bool)
+send_to_lr_bool = np.zeros(len(mlfin_srl_ov), dtype=bool)
 for k in lr_decision_vals:
     # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
-    send_to_lr_bool = (send_to_lr_bool) | (mlfin_srl["flag_workflow"] == k)
+    send_to_lr_bool = (send_to_lr_bool) | (mlfin_srl_ov["flag_workflow"] == k)
 
 
 # Now do the same for sources sent to LGZ
@@ -532,17 +519,17 @@ lgz_decision_vals = []
 for key in lgz_keys:
     lgz_decision_vals.append(decision_block[key])
 
-send_to_lgz_bool = np.zeros(len(mlfin_srl), dtype=bool)
+send_to_lgz_bool = np.zeros(len(mlfin_srl_ov), dtype=bool)
 for k in lgz_decision_vals:
     # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
-    send_to_lgz_bool = (send_to_lgz_bool) | (mlfin_srl["flag_workflow"] == k)
+    send_to_lgz_bool = (send_to_lgz_bool) | (mlfin_srl_ov["flag_workflow"] == k)
 
 
 total_epoint = send_to_lr_bool | send_to_lgz_bool
 snotin = ~total_epoint
 
 # Write this to file - to be used as input to the LR code
-
+write_out = False
 if write_out is True:
 
     print("Writing the output of the workflow")
