@@ -135,29 +135,34 @@ lr_calibrating = input("Are you running this workflow to iterate through and sel
 
 
 # Read in the ML output on all overlapping area sources
-path_srl = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs_srl"+add_str+"/*2019*") + "/" + field + "_ML_RUN_fin_overlap_srl.fits"
-path_gaus = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/full_runs_gaul"+add_str+"/*2019*") + "/" + field + "_ML_RUN_fin_overlap_gaul.fits"
+path_srl = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/elaisn1_lr/full_runs_srl"+add_str+"/*2019*") + "/" + field + "_ML_RUN_fin_overlap_srl.fits"
+path_gaus = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/elaisn1_lr/full_runs_gaul"+add_str+"/*2019*") + "/" + field + "_ML_RUN_fin_overlap_gaul.fits"
 
 
 mlfin_srl = Table.read(path_srl)
 mlfin_gaus = Table.read(path_gaus)
 
 # LR threshold (currently hard-coded)
-lr_th = 0.075
+mldir = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/elaisn1_lr/colour_runs/"+add_str+"/*2019*")
+mag_nm_cumul, mag_qm_cumul, nm_bin_c, _, Q0_c, th_runs = pickle.load(open('{0}/col_iter_out_srl.pckl'.format(mldir, "_srl"), "rb"))
+lr_th = th_runs[-1]
+
+print("Using LR threshold: {0}".format(lr_th))
 
 
-indx_ov_srl, bool_ov_srl = get_overlap_sources(mlfin_srl)
-indx_ov_gaus, bool_ov_gaus = get_overlap_sources(mlfin_gaus)
+# Use the FLAG_OVERLAP to compute this
+bool_ov_srl = mlfin_srl["FLAG_OVERLAP"] == 7
+bool_ov_gaus = mlfin_gaus["FLAG_OVERLAP"] == 7
 
-print("Total # of sources in srl and gaus catalogues within overlapping area: {0}, {1}".format(len(indx_ov_srl), len(indx_ov_gaus)))
+print("Total # of sources in srl and gaus catalogues within overlapping area: {0}, {1}".format(len(bool_ov_srl), len(bool_ov_gaus)))
 
 # Set this as the baseline of "All" sources
-srl_base = len(indx_ov_srl)
-gaus_base = len(indx_ov_gaus)
+srl_base = np.sum(bool_ov_srl)
+gaus_base = np.sum(bool_ov_gaus)
 
 # Filter to get soures/Gaussians within overlapping area
-mlfin_srl_ov = mlfin_srl[(indx_ov_srl)]
-mlfin_gaus_ov = mlfin_gaus[(indx_ov_gaus)]
+mlfin_srl_ov = mlfin_srl[(bool_ov_srl)]
+mlfin_gaus_ov = mlfin_gaus[(bool_ov_gaus)]
 
 
 # Definition of the cuts to make
@@ -479,7 +484,7 @@ assert end_point_sum == srl_base, "Number of sources in end points don't match u
 
 # Copy the flag_workflow comlum to the full source catalogue
 mlfin_srl["flag_workflow"] = np.nan
-mlfin_srl["flag_workflow"][indx_ov_srl] = mlfin_srl_ov["flag_workflow"]
+mlfin_srl["flag_workflow"][bool_ov_srl] = mlfin_srl_ov["flag_workflow"]
 
 #############################################################################
 
