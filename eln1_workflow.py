@@ -50,49 +50,6 @@ To do:
 """
 
 
-def write_worflow_out(sources_to_lr, sources_to_lgz):
-    outdir_name = "workflow_iter_1"
-    last_num = outdir_name[-1]
-
-    if os.path.exists(outdir_name):
-        # Get list of directories
-        dirs_today = sorted(glob.glob(outdir_name+"*"))
-        last_num = int(dirs_today[-1].split("_")[-1])+1
-
-        # Now finally create the directory
-        outdir_name = "workflow_iter_"+str(last_num)
-        os.makedirs(outdir_name)
-    else:
-        os.makedirs(outdir_name)
-
-    outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow.fits"
-    mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits')
-
-    pickle.dump(sources_to_lr, open(outdir_name + "/sources_to_send_to_lr.pckl", "wb"))
-    pickle.dump(sources_to_lr, open(outdir_name + "/sources_to_send_to_lgz.pckl", "wb"))
-
-    # Write the decision block
-    pickle.dump(decision_block, open(outdir_name + "/bootes_decision_block_dict.pckl", "wb"))
-    return
-
-
-def get_overlap_sources(lofar_cat):
-    """
-    Return Source_id columns of LOFAR sources within overlapping area of multiwavelength coverage
-    """
-    overlapping_sources = []
-    overlapping_bool = []
-    for i in range(len(lofar_cat)):
-        if ((isinpan(lofar_cat['RA'][i],lofar_cat['DEC'][i])) and (isinukidss(lofar_cat['RA'][i],lofar_cat['DEC'][i])) and
-            (isinSWIRE(lofar_cat['RA'][i], lofar_cat['DEC'][i]))):
-            overlapping_sources.append(i)
-            overlapping_bool.append(True)
-        else:
-            overlapping_bool.append(False)
-
-    return overlapping_sources, overlapping_bool
-
-
 def pcent_srl(number_of_sources):
     """
     Return percentage of sources w.r.t. base_sources
@@ -154,7 +111,7 @@ print("Using LR threshold: {0}".format(lr_th))
 bool_ov_srl = mlfin_srl["FLAG_OVERLAP"] == 7
 bool_ov_gaus = mlfin_gaus["FLAG_OVERLAP"] == 7
 
-print("Total # of sources in srl and gaus catalogues within overlapping area: {0}, {1}".format(len(bool_ov_srl), len(bool_ov_gaus)))
+print("Total # of sources in srl and gaus catalogues within overlapping area: {0}, {1}".format(np.sum(bool_ov_srl), np.sum(bool_ov_gaus)))
 
 # Set this as the baseline of "All" sources
 srl_base = np.sum(bool_ov_srl)
@@ -504,35 +461,51 @@ if lr_calibrating.lower()[0] == "y":
     lr_keys = ["clus_nm_comp_hlr", "nclus_s_lr", "m1_nglr_hslr", "m1_sg_lr"]
     prefilt_keys = ["clus_nm_ncomp_llr", "nclus_s_nlr"]
 
-    totlr_keys = lr_keys
+    totlr_keys = []
+    totlr_keys.extend(lr_keys)
     totlr_keys.extend(prefilt_keys)
 
     lgz_keys = [aa for aa in flag_names if aa not in totlr_keys]
+
+    # The sources sent to LR are different here - we actually send prefiltering sources here too!
+    lr_decision_vals = []
+    for key in totlr_keys:
+        lr_decision_vals.append(decision_block[key])
+
+    send_to_lr_bool = np.zeros(len(mlfin_srl), dtype=bool)
+    for k in lr_decision_vals:
+        # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
+        send_to_lr_bool = (send_to_lr_bool) | (mlfin_srl["flag_workflow"] == k)
+
 elif lr_calibrating.lower()[0] == "n":
     # Get the indices of sources to be sent to LR
     lr_keys = ["clus_nm_comp_hlr", "nclus_s_lr", "m1_nglr_hslr", "m1_sg_lr", "m2_1glr_comp_hlr"]
     prefilt_keys = ["clus_nm_ncomp_llr", "nclus_s_nlr", "m2_nglr"]
 
-    totlr_keys = lr_keys
+    totlr_keys = []
+    totlr_keys.extend(lr_keys)
     totlr_keys.extend(prefilt_keys)
 
     lgz_keys = [aa for aa in flag_names if aa not in totlr_keys]
+
+    lr_decision_vals = []
+    for key in lr_keys:
+        lr_decision_vals.append(decision_block[key])
+
+    send_to_lr_bool = np.zeros(len(mlfin_srl), dtype=bool)
+    for k in lr_decision_vals:
+        # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
+        send_to_lr_bool = (send_to_lr_bool) | (mlfin_srl["flag_workflow"] == k)
+
+    # Keep two prefiltering keys - as these are now sent to Martin for pre-filtering
+    prefilt1_keys = ["clus_nm_ncomp_llr"]
+    prefilt2_keys = ["nclus_s_nlr", "m2_nglr"]
+
 else:
     raise Exception("Enter a valid reason for running this workflow script!")
 
 
-lr_decision_vals = []
-for key in lr_keys:
-    lr_decision_vals.append(decision_block[key])
-
-
-send_to_lr_bool = np.zeros(len(mlfin_srl), dtype=bool)
-for k in lr_decision_vals:
-    # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
-    send_to_lr_bool = (send_to_lr_bool) | (mlfin_srl["flag_workflow"] == k)
-
-
-# Now do the same for sources sent to LGZ
+# Now do the same for sources sent to LGZ - this stays the same regardless of whether you are calibrating LR or not
 lgz_decision_vals = []
 for key in lgz_keys:
     lgz_decision_vals.append(decision_block[key])
@@ -542,16 +515,109 @@ for k in lgz_decision_vals:
     # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
     send_to_lgz_bool = (send_to_lgz_bool) | (mlfin_srl["flag_workflow"] == k)
 
+# Define the pre-filtering keys separately and add a "FLAG_WORKFLOW" column to the radio catalogue
+if lr_calibrating.lower()[0] == "n":
+    # Now do the same for sources sent to pre-filtering
+    prefilt1_decision_vals = []
+    print("##### Prefilt-2 Keys #####")
+    for key in prefilt1_keys:
+        print(key)
+        prefilt1_decision_vals.append(decision_block[key])
 
-total_epoint = send_to_lr_bool | send_to_lgz_bool
+    send_to_prefilt1_bool = np.zeros(len(mlfin_srl), dtype=bool)
+    for k in prefilt1_decision_vals:
+        # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
+        send_to_prefilt1_bool = (send_to_prefilt1_bool) | (mlfin_srl["flag_workflow"] == k)
+
+    # Now do the same for sources sent to pre-filtering
+    prefilt2_decision_vals = []
+    print("##### Prefilt-2 Keys #####")
+    for key in prefilt1_keys:
+        print(key)
+        prefilt2_decision_vals.append(decision_block[key])
+
+    send_to_prefilt2_bool = np.zeros(len(mlfin_srl), dtype=bool)
+    for k in prefilt2_decision_vals:
+        # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
+        send_to_prefilt2_bool = (send_to_prefilt2_bool) | (mlfin_srl["flag_workflow"] == k)
+
+    total_epoint = send_to_lr_bool | send_to_lgz_bool | send_to_prefilt1_bool | send_to_prefilt2_bool
+
+elif lr_calibrating.lower()[0] == "y":
+    prefilt_decision_vals = []
+    for key in prefilt_keys:
+        prefilt_decision_vals.append(decision_block[key])
+
+    send_to_prefilt_bool = np.zeros(len(mlfin_srl), dtype=bool)
+    for k in prefilt_decision_vals:
+        # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
+        send_to_prefilt_bool = (send_to_prefilt_bool) | (mlfin_srl["flag_workflow"] == k)
+
+    send_to_prefilt1_bool = None
+    send_to_prefilt2_bool = None
+
+    total_epoint = send_to_lr_bool | send_to_lgz_bool | send_to_prefilt_bool
+
+
 snotin = ~total_epoint
 
-# Write this to file - to be used as input to the LR code
+# Now delete the "flag_workflow" column and overwrite it with "FLAG_WORKFLOW" - which has 5 options
+del mlfin_srl["flag_workflow"]
+
+flag_bits = dict()
+flag_bits["lr"] = 1
+flag_bits["lgz"] = 2
+flag_bits["prefilt1"] = 3
+flag_bits["prefilt2"] = 4
+
+mlfin_srl["FLAG_WORKFLOW"] = 0
+mlfin_srl["FLAG_WORKFLOW"][send_to_lr_bool] = flag_bits["lr"]
+mlfin_srl["FLAG_WORKFLOW"][send_to_lgz_bool] = flag_bits["lgz"]
+
+if lr_calibrating.lower()[0] == "n":
+    mlfin_srl["FLAG_WORKFLOW"][send_to_prefilt1_bool] = flag_bits["prefilt1"]
+    mlfin_srl["FLAG_WORKFLOW"][send_to_prefilt2_bool] = flag_bits["prefilt2"]
+
+
+# Write this to file - to be used as input to the LR code (if lr_calibrating="y") or used for LGZ and pre-filtering purposes
 
 if write_out is True:
+    print("***** Writing the output of the workflow *****")
 
-    print("Writing the output of the workflow")
-    write_worflow_out(send_to_lr_bool, send_to_lgz_bool)
+    if lr_calibrating.lower()[0] == "y":
+        outdir_name = "workflow_iter_1"
+        last_num = outdir_name[-1]
+
+        if os.path.exists(outdir_name):
+            # Get list of directories
+            dirs_today = sorted(glob.glob(outdir_name+"*"))
+            last_num = int(dirs_today[-1].split("_")[-1])+1
+
+            # Now finally create the directory
+            outdir_name = "workflow_iter_"+str(last_num)
+            os.makedirs(outdir_name)
+        else:
+            os.makedirs(outdir_name)
+
+    elif lr_calibrating.lower()[0] == "n":
+        outdir_name = "iterated_endpoints"
+
+        if os.path.exists(outdir_name):
+            os.removedirs(outdir_name)
+        else:
+            os.makedirs(outdir_name)
+
+    # Write the common categories to file
+    pickle.dump(send_to_lr_bool, open(outdir_name + "/sources_to_send_to_lr.pckl", "wb"))
+    pickle.dump(send_to_lgz_bool, open(outdir_name + "/sources_to_send_to_lgz.pckl", "wb"))
+
+    # Write the decision block
+    pickle.dump(decision_block, open(outdir_name + "/bootes_decision_block_dict.pckl", "wb"))
+
+    if lr_calibrating.lower()[0] == "n":
+        outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow.fits"
+        print("***** Also writing out the FULL radio catalogue with 'FLAG_WORKFLOW' column: {0} *****".format(outcat_fname))
+        mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits', overwrite=True)
 
 
 """
