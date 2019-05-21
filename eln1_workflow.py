@@ -75,37 +75,39 @@ def indx_to_bool(array_of_indices, array_length):
 
 field = "EN1"
 # Write output i.e. which files are at each endpoint to file?
-write_out = True
+write_out = False
 
 # Are you using the output after a workflow iteration?
-workflow_iter = False
+workflow_iter = True
 
 if workflow_iter:
     add_str = "_workflow"
 else:
     add_str = ""
 
+print("Wiring out? : {0} and using output from 'workflow_iter'? : {1}".format(write_out, workflow_iter))
 
 # Are you running this workflow to iterate through and select sources most suitable to LR calibration?
 # If so, set True and the indices will be different to when the workflow is run for the final version
 lr_calibrating = input("Are you running this workflow to iterate through and select sources most suitable to LR calibration? (Y/N) ")
 
-
 # Read in the ML output on all overlapping area sources
 path_srl = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/elaisn1_lr/full_runs_srl"+add_str+"/*2019*") + "/" + field + "_ML_RUN_fin_overlap_srl.fits"
 path_gaus = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/elaisn1_lr/full_runs_gaul"+add_str+"/*2019*") + "/" + field + "_ML_RUN_fin_overlap_gaul.fits"
-
 
 mlfin_srl = Table.read(path_srl)
 mlfin_gaus = Table.read(path_gaus)
 
 # LR threshold (currently hard-coded)
-mldir = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/elaisn1_lr/colour_runs/"+add_str+"/*2019*")
+mldir = latest_dir("/disk1/rohitk/ELN1_project/OCT17_ELAIS_im/maxl_test/elaisn1_lr/colour_runs"+add_str+"/*2019*")
+print("Using calibrated values from dirctory: {0}".format(mldir))
 mag_nm_cumul, mag_qm_cumul, nm_bin_c, _, Q0_c, th_runs = pickle.load(open('{0}/col_iter_out_srl.pckl'.format(mldir, "_srl"), "rb"))
 lr_th = th_runs[-1]
 
 print("Using LR threshold: {0}".format(lr_th))
-
+print("Q0_c: ")
+print(Q0_c)
+print("Total Q0s: {0}".format(np.sum(Q0_c)))
 
 # Use the FLAG_OVERLAP to compute this
 bool_ov_srl = mlfin_srl["FLAG_OVERLAP"] == 7
@@ -126,7 +128,7 @@ mlfin_gaus_ov = mlfin_gaus[(bool_ov_gaus)]
 cuts = dict()
 cuts["large"] = 15.         # Large size cut
 cuts["bright"] = 10*1e-3    # Bright cut
-cuts["nth_nn"] = 4          # n number of NNs allowed for source to be "non-clustered"
+cuts["nth_nn"] = 5          # n number of NNs allowed for source to be "non-clustered" - actually -1 this as this astropy.match_coordinates_sky counts the source in question as a neighbour in this case
 cuts["nth_nnsep"] = 45.     # nth_nn NNs within this separation to be "non-clustered"
 cuts["high_lr_th"] = 10 * lr_th
 cuts["compact"] = 10.
@@ -135,13 +137,14 @@ cuts["compact"] = 10.
 lgz_tot = []
 lrid_tot = []
 prefilt_tot = []
+deblend_tot = []
 
 # Range of the end-points and corresponding names
-flag_n = np.arange(0., 14)
-
 flag_names = ["large", "clus_m", "clus_nm_comp_hlr", "clus_nm_ncomp_llr", "nclus_s_lr", "nclus_s_nlr",
               "m1_nglr_hslr", "m1_nglr_lslr", "m1_sg_lr", "m1_diffg_lr",
-              "m2_nglr", "m2_2g_lr", "m2_1glr_comp_hlr", "m2_1glr_ncomp_llr"]
+              "m2_nglr", "m2_2g_lr", "m2_1glr_comp_hlr", "m2_1glr_ncomp_llr", "m1_gth1_glr_deblend"]
+
+flag_n = np.arange(0., len(flag_names))
 
 # Dictionary to keep track of the sources in different blocks
 decision_block = dict()
@@ -176,7 +179,7 @@ clustered = (~large) & (sep2d.arcsec <= cuts["nth_nnsep"])
 
 # Print out some stats
 print("# of clustered sources {0}, {1:3.2f}%".format(np.sum(clustered), pcent_srl(np.sum(clustered))))
-print("# of non-clustered sources {0}, {1:3.2f}%".format(np.sum(~clustered), pcent_srl(np.sum(~clustered))))
+
 
 # If clustered, check if there are any multiple components
 clustered_multiple = (clustered) & (mlfin_srl_ov["S_Code"] != "S")
@@ -206,6 +209,9 @@ mlfin_srl_ov["flag_workflow"][clustered_nmultiple_llr] = decision_block["clus_nm
 
 # For non-clustered single sources, check if they have a good LR
 nclustered = (~large) & (sep2d.arcsec > cuts["nth_nnsep"])
+
+print("# of non-clustered sources {0}, {1:3.2f}%".format(np.sum(~clustered), pcent_srl(np.sum(~clustered))))
+
 nclustered_single_id = ((nclustered) & (mlfin_srl_ov["S_Code"] == "S") & (mlfin_srl_ov["lr_fin"] >= lr_th))
 
 # Line edited to add nan LR values
@@ -325,16 +331,31 @@ diff_lr_index = ~same_lr_index
 diff_lrindex_srl_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id[diff_lr_index])
 same_lrindex_srl_indx = np.isin(mlfin_srl_ov["Source_id"], m1_gid_source_id[same_lr_index])
 
+test_diff = np.copy(diff_lrindex_srl_indx)
+del diff_lrindex_srl_indx
+#################################################################
+# Adding the additional de-blending workflow
+m1_difflrindx_gcat_indx = [mlfin_gaus_ov["Source_id"] == aa for aa in m1_gid_source_id[diff_lr_index]]
+m1_sid_of_diff_lr_index = m1_gid_source_id[diff_lr_index]
+
+tt = np.array([(np.sum(mlfin_gaus_ov["lr_fin"][aa] > cuts["high_lr_th"]) >= 2) for aa in m1_difflrindx_gcat_indx])
+m1_glr_deblend_sid = np.isin(mlfin_srl_ov["Source_id"], m1_sid_of_diff_lr_index[tt])
+m1_glr_lgz_sid = np.isin(mlfin_srl_ov["Source_id"], m1_sid_of_diff_lr_index[~tt])
+
 # Add to total numbers
 lrid_tot.append(np.sum(same_lr_index))
-lgz_tot.append(np.sum(diff_lr_index))
+deblend_tot.append(np.sum(tt))
+lgz_tot.append(np.sum(~tt))
 
 mlfin_srl_ov["flag_workflow"][same_lrindex_srl_indx] = decision_block["m1_sg_lr"]
-mlfin_srl_ov["flag_workflow"][diff_lrindex_srl_indx] = decision_block["m1_diffg_lr"]
+mlfin_srl_ov["flag_workflow"][m1_glr_deblend_sid] = decision_block["m1_gth1_glr_deblend"]
+mlfin_srl_ov["flag_workflow"][m1_glr_lgz_sid] = decision_block["m1_diffg_lr"]
 
 print("# Braches M1 - B and C #")
 print("# of sources with all gaus-id index same as source-id index {0}, {1:3.2f}%".format(np.sum(same_lrindex_srl_indx), pcent_srl(np.sum(same_lrindex_srl_indx))))
-print("# of sources with >= 1 different gaus-id index to source-id index high source LR {0}, {1:3.2f}%".format(np.sum(diff_lrindex_srl_indx), pcent_srl(np.sum(diff_lrindex_srl_indx))))
+print("# of sources with >= 1 different gaus-id index to source-id index high source LR {0}, {1:3.2f}%".format(np.sum(test_diff), pcent_srl(np.sum(test_diff))))
+print("Of these {0} sources, # of sources with at least 2 or more Gaussians with high LR: {1}, {2:3.2f}% ".format(np.sum(test_diff), np.sum(tt), pcent_srl(np.sum(tt))))
+print("Of these {0} sources, # of sources WITHOUT at least 2 or more Gaussians with high LR: {1}, {2:3.2f}% ".format(np.sum(test_diff), np.sum(~tt), pcent_srl(np.sum(~tt))))
 
 print("\n ##### End of M1 branch #####")
 
@@ -430,11 +451,12 @@ mlfin_srl_ov["flag_workflow"][m2_one_lgid_srl_ov_indx] = decision_block["m2_1glr
 print("\n ################### \n")
 # At this stage, print out the "tentative" final sources
 print("Final # of sources to send to LGZ: {0}, {1:3.2f}%".format(np.sum(lgz_tot), pcent_srl(np.sum(lgz_tot))))
+print("Final # of sources to send to Deblending: {0}, {1:3.2f}%".format(np.sum(deblend_tot), pcent_srl(np.sum(deblend_tot))))
 print("Final # of sources with good LRs: {0}, {1:3.2f}%".format(np.sum(lrid_tot), pcent_srl(np.sum(lrid_tot))))
 print("Final # of sources to send to Pre-filtering: {0}, {1:3.2f}%".format(np.sum(prefilt_tot), pcent_srl(np.sum(prefilt_tot))))
 
 
-end_point_sum = np.sum(lgz_tot) + np.sum(lrid_tot) + np.sum(prefilt_tot)
+end_point_sum = np.sum(lgz_tot) + np.sum(lrid_tot) + np.sum(prefilt_tot) + np.sum(deblend_tot)
 print("Total number of sources in all end-points: {0}, {1:3.2f}%".format(end_point_sum, pcent_srl(end_point_sum)))
 
 assert end_point_sum == srl_base, "Number of sources in end points don't match up with total number of sources"
@@ -460,12 +482,15 @@ if lr_calibrating.lower()[0] == "y":
     # Get the indices of sources to be sent to LR
     lr_keys = ["clus_nm_comp_hlr", "nclus_s_lr", "m1_nglr_hslr", "m1_sg_lr"]
     prefilt_keys = ["clus_nm_ncomp_llr", "nclus_s_nlr"]
+    deblend_keys = ["m1_gth1_glr_deblend"]
 
     totlr_keys = []
     totlr_keys.extend(lr_keys)
     totlr_keys.extend(prefilt_keys)
 
     lgz_keys = [aa for aa in flag_names if aa not in totlr_keys]
+    del lgz_keys[lgz_keys.index(deblend_keys[0])]
+    print(lgz_keys)
 
     # The sources sent to LR are different here - we actually send prefiltering sources here too!
     lr_decision_vals = []
@@ -481,12 +506,15 @@ elif lr_calibrating.lower()[0] == "n":
     # Get the indices of sources to be sent to LR
     lr_keys = ["clus_nm_comp_hlr", "nclus_s_lr", "m1_nglr_hslr", "m1_sg_lr", "m2_1glr_comp_hlr"]
     prefilt_keys = ["clus_nm_ncomp_llr", "nclus_s_nlr", "m2_nglr"]
+    deblend_keys = ["m1_gth1_glr_deblend"]
 
     totlr_keys = []
     totlr_keys.extend(lr_keys)
     totlr_keys.extend(prefilt_keys)
 
     lgz_keys = [aa for aa in flag_names if aa not in totlr_keys]
+    del lgz_keys[lgz_keys.index(deblend_keys[0])]
+    print(lgz_keys)
 
     lr_decision_vals = []
     for key in lr_keys:
@@ -515,11 +543,22 @@ for k in lgz_decision_vals:
     # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
     send_to_lgz_bool = (send_to_lgz_bool) | (mlfin_srl["flag_workflow"] == k)
 
+# Now do the debleding workflow
+deblend_decision_vals = []
+for key in deblend_keys:
+    deblend_decision_vals.append(decision_block[key])
+
+send_to_deblend_bool = np.zeros(len(mlfin_srl), dtype=bool)
+for k in deblend_decision_vals:
+    # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
+    send_to_deblend_bool = (send_to_deblend_bool) | (mlfin_srl["flag_workflow"] == k)
+
+
 # Define the pre-filtering keys separately and add a "FLAG_WORKFLOW" column to the radio catalogue
 if lr_calibrating.lower()[0] == "n":
     # Now do the same for sources sent to pre-filtering
     prefilt1_decision_vals = []
-    print("##### Prefilt-2 Keys #####")
+    print("##### Prefilt-1 Keys #####")
     for key in prefilt1_keys:
         print(key)
         prefilt1_decision_vals.append(decision_block[key])
@@ -532,7 +571,7 @@ if lr_calibrating.lower()[0] == "n":
     # Now do the same for sources sent to pre-filtering
     prefilt2_decision_vals = []
     print("##### Prefilt-2 Keys #####")
-    for key in prefilt1_keys:
+    for key in prefilt2_keys:
         print(key)
         prefilt2_decision_vals.append(decision_block[key])
 
@@ -541,7 +580,7 @@ if lr_calibrating.lower()[0] == "n":
         # print(k, np.sum((send_to_lr_bool) & (mlfin_srl_ov["flag_workflow"] == k)))
         send_to_prefilt2_bool = (send_to_prefilt2_bool) | (mlfin_srl["flag_workflow"] == k)
 
-    total_epoint = send_to_lr_bool | send_to_lgz_bool | send_to_prefilt1_bool | send_to_prefilt2_bool
+    total_epoint = send_to_lr_bool | send_to_lgz_bool | send_to_prefilt1_bool | send_to_prefilt2_bool | send_to_deblend_bool
 
 elif lr_calibrating.lower()[0] == "y":
     prefilt_decision_vals = []
@@ -556,12 +595,13 @@ elif lr_calibrating.lower()[0] == "y":
     send_to_prefilt1_bool = None
     send_to_prefilt2_bool = None
 
-    total_epoint = send_to_lr_bool | send_to_lgz_bool | send_to_prefilt_bool
+    total_epoint = send_to_lr_bool | send_to_lgz_bool | send_to_prefilt_bool | send_to_deblend_bool
 
 
 snotin = ~total_epoint
 
 # Now delete the "flag_workflow" column and overwrite it with "FLAG_WORKFLOW" - which has 5 options
+mlfin_srl["fworkflow_all"] = np.copy(mlfin_srl["flag_workflow"])
 del mlfin_srl["flag_workflow"]
 
 flag_bits = dict()
@@ -569,10 +609,12 @@ flag_bits["lr"] = 1
 flag_bits["lgz"] = 2
 flag_bits["prefilt1"] = 3
 flag_bits["prefilt2"] = 4
+flag_bits["deblend"] = 5
 
 mlfin_srl["FLAG_WORKFLOW"] = 0
 mlfin_srl["FLAG_WORKFLOW"][send_to_lr_bool] = flag_bits["lr"]
 mlfin_srl["FLAG_WORKFLOW"][send_to_lgz_bool] = flag_bits["lgz"]
+mlfin_srl["FLAG_WORKFLOW"][send_to_deblend_bool] = flag_bits["deblend"]
 
 if lr_calibrating.lower()[0] == "n":
     mlfin_srl["FLAG_WORKFLOW"][send_to_prefilt1_bool] = flag_bits["prefilt1"]
@@ -602,22 +644,51 @@ if write_out is True:
     elif lr_calibrating.lower()[0] == "n":
         outdir_name = "iterated_endpoints"
 
-        if os.path.exists(outdir_name):
-            os.removedirs(outdir_name)
+        if not os.path.exists(outdir_name):
+            print("Making directory")
+            os.makedirs(outdir_name)
         else:
+            print("Deleting directory contents and re-making directory")
+            os.system("rm -rf " + outdir_name)
             os.makedirs(outdir_name)
 
+        # Do some consistency check before writing the final iterated endpoints
+        print("Total no. of sources at all endpoints: {0}".format(np.sum(total_epoint)))
+        print("##### Check if all overlap sources are in some endpoints... #####")
+        print("No. of sources in the overlapping area: {0}".format(np.sum(mlfin_srl["FLAG_OVERLAP"] == 7)))
+        print("No. of sources at some endpoint: {0}".format(np.sum(mlfin_srl["FLAG_WORKFLOW"] > 0)))
+        print("No. of sources at some endpoint AND also in overlap: {0}".format(np.sum((mlfin_srl["FLAG_WORKFLOW"] > 0) & (mlfin_srl["FLAG_OVERLAP"] == 7))))
+        print("No. of sources at some endpoint AND NOT in overlap: {0}".format(np.sum((mlfin_srl["FLAG_WORKFLOW"] > 0) & ~(mlfin_srl["FLAG_OVERLAP"] == 7))))
+        print("No. of sources NOT in ANY endpoint BUT IN overlap: {0}".format(np.sum(~(mlfin_srl["FLAG_WORKFLOW"] > 0) & (mlfin_srl["FLAG_OVERLAP"] == 7))))
+        n_duplicates = np.sum(send_to_lr_bool & send_to_lgz_bool & send_to_prefilt1_bool & send_to_prefilt2_bool) 
+        print("No. of duplicates between the four categories: {0}".format(n_duplicates))
+        print("#################################################################")
+
+    print(outdir_name)
     # Write the common categories to file
     pickle.dump(send_to_lr_bool, open(outdir_name + "/sources_to_send_to_lr.pckl", "wb"))
     pickle.dump(send_to_lgz_bool, open(outdir_name + "/sources_to_send_to_lgz.pckl", "wb"))
+    pickle.dump(send_to_deblend_bool, open(outdir_name + "/sources_to_send_to_deblend.pckl", "wb"))
 
     # Write the decision block
-    pickle.dump(decision_block, open(outdir_name + "/bootes_decision_block_dict.pckl", "wb"))
+    pickle.dump(decision_block, open(outdir_name + "/decision_block_dict.pckl", "wb"))
 
     if lr_calibrating.lower()[0] == "n":
         outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow.fits"
         print("***** Also writing out the FULL radio catalogue with 'FLAG_WORKFLOW' column: {0} *****".format(outcat_fname))
         mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits', overwrite=True)
+
+        # Now write the catalogue with the LR < threshold set to nans
+        mlfin_srl["lr_index_fin"][mlfin_srl["lr_fin"] < lr_th] = np.nan
+        mlfin_srl["lr_dist_fin"][mlfin_srl["lr_fin"] < lr_th] = np.nan
+        mlfin_srl["lr_fin"][mlfin_srl["lr_fin"] < lr_th] = np.nan
+
+        outcat_fname = path_srl.split("/")[-1][:-5] + "_workflow_th.fits"
+        print("***** Also writing out the FULL radio catalogue with NAN LRs and 'FLAG_WORKFLOW' column: {0} *****".format(outcat_fname))
+        mlfin_srl.write(outdir_name + "/" + outcat_fname, format='fits', overwrite=True)
+
+        pickle.dump(send_to_prefilt1_bool, open(outdir_name + "/sources_to_send_to_prefilt1.pckl", "wb"))
+        pickle.dump(send_to_prefilt2_bool, open(outdir_name + "/sources_to_send_to_prefilt2.pckl", "wb"))
 
 
 """
