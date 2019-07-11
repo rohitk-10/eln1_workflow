@@ -11,9 +11,10 @@ Edit the paths to point to the calibrated q(m) and thresholds and the paths to t
 * Can be run in a few different ways:
 1. Selecting sources most suitable for LR:
 	- Set "write_out" = True to write output
+	- Set workflow_iter = False - You don't wait to use output from a previous iteration of the flowchart. As you are running the flowchart for the first time to find the most suitable sources for LR calibration, this is the appropriate choice.
 	- When prompted by code, press "y" to find sources most suitable for LR
 
-	- Output will be in workflow_iter_N/ directory
+	- Output will be in workflow_iter_N/ directory where N corresponds to the Nth time that the output is written 
 
 2. Selecting sources that need to be send to visual analysis
 	- Set "write_out" = True to write output
