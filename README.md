@@ -21,9 +21,9 @@ Edit the paths to point to the calibrated q(m) and thresholds and the paths to t
 	- Set workflow_iter = True - as you are now using LR output after step 1, i.e. after you have calibrated on sources most suitable for LR
 	- When prompted by code, press "n" to choose to not calibrate LR
 	- This created a FLAG_WORKFLOW column with flags for the different endpoints for each radio source
-		FLAG_WORKFLOW = 1; Accept LR-ID
-		FLAG_WORKFLOW = 2; Send to LGZ
-		FLAG_WORKFLOW = 3; Pre-filter1 (workflow_3)
-		FLAG_WORKFLOW = 4; Pre-filter2 (workflow_4)
-		FLAG_WORKFLOW = 5; Deblending
+		-- FLAG_WORKFLOW = 1; Accept LR-ID
+		-- FLAG_WORKFLOW = 2; Send to LGZ
+		-- FLAG_WORKFLOW = 3; Pre-filter1 (workflow_3)
+		-- FLAG_WORKFLOW = 4; Pre-filter2 (workflow_4)
+		-- FLAG_WORKFLOW = 5; Deblending
 	- Output will be in iterated_endpoints/ directory (BEWARE - this is overwritten if code is run again in this mode!)
